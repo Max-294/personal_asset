@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>個人化資產配置與管理</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Personal Asset Dashboard</p>
+        <h1>個人化資產配置與管理</h1>
+      </div>
+      <div class="header-meta">
+        <span id="sourceStatus">尚未連結資料</span>
+        <span id="updatedAt">--</span>
+        <button type="button" id="refreshData" class="header-action">重新整理資料</button>
+      </div>
+    </header>
+
+    <main>
+      <nav class="view-tabs" aria-label="Dashboard 分頁">
+        <button type="button" class="tab-button is-active" data-view="holdings">目前持股</button>
+        <button type="button" class="tab-button" data-view="realizedTw">台股已實現損益</button>
+        <button type="button" class="tab-button" data-view="realizedUs">美股已實現損益</button>
+      </nav>
+
+      <section class="summary-grid" aria-label="資產摘要">
+        <article class="metric">
+          <span id="primaryMetricLabel">總資產（台幣）</span>
+          <strong id="totalValue">--</strong>
+        </article>
+        <article class="metric">
+          <span id="secondMetricLabel">資產類別</span>
+          <strong id="assetClassCount">--</strong>
+        </article>
+        <article class="metric">
+          <span id="thirdMetricLabel">帳戶數</span>
+          <strong id="accountCount">--</strong>
+        </article>
+        <article class="metric">
+          <span id="fourthMetricLabel">最大配置</span>
+          <strong id="largestClass">--</strong>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <h2 id="allocationTitle">資產配置</h2>
+            <span id="allocationTotal">--</span>
+          </div>
+          <div id="allocationChart" class="donut-wrap"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2 id="barTitle">帳戶分布</h2>
+            <span id="barSubtitle">依目前市值</span>
+          </div>
+          <div id="accountBars" class="bar-list"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header table-header">
+          <h2 id="detailTitle">資產明細</h2>
+          <input id="tableSearch" type="search" placeholder="搜尋資產、帳戶或類別" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="tableHead"></thead>
+            <tbody id="assetRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <template id="emptyState">
+      <tr>
+        <td colspan="8" class="empty">
+          資料載入中，或先載入範例查看 Dashboard 呈現方式。
+        </td>
+      </tr>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
