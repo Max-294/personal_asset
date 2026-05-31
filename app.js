@@ -237,13 +237,24 @@ async function fetchRealizedRows(sheetUrl, sheetName, gid, normalizer) {
 }
 
 async function fetchSheetCsv(sheetUrl, sheetName, gid) {
-  const csvUrl = buildSheetApiUrl(sheetUrl, sheetName, gid);
-  const response = await fetch(csvUrl);
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Google Sheet 回應錯誤：${response.status}`);
+  if (isStaticHosted()) {
+    return fetchSheetCsvViaJsonp(sheetUrl, sheetName, gid);
   }
-  return response.text();
+
+  const csvUrl = buildSheetApiUrl(sheetUrl, sheetName, gid);
+  try {
+    const response = await fetch(csvUrl);
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || `Google Sheet 回應錯誤：${response.status}`);
+    }
+    return response.text();
+  } catch (error) {
+    if (location.protocol === "file:") {
+      throw error;
+    }
+    return fetchSheetCsvViaJsonp(sheetUrl, sheetName, gid);
+  }
 }
 
 function buildSheetApiUrl(sheetUrl, sheetName, gid) {
@@ -261,6 +272,77 @@ function buildSheetApiUrl(sheetUrl, sheetName, gid) {
     params.set("sheetName", sheetName);
   }
   return `/api/sheet?${params.toString()}`;
+}
+
+function buildGvizUrl(sheetUrl, sheetName, gid, callbackName) {
+  const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!match) {
+    throw new Error("無法解析 Google Sheet ID");
+  }
+  const params = new URLSearchParams({
+    tqx: `out:json;responseHandler:${callbackName}`,
+  });
+  if (sheetName) {
+    params.set("sheet", sheetName);
+  } else {
+    params.set("gid", gid || "0");
+  }
+  return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?${params.toString()}`;
+}
+
+function fetchSheetCsvViaJsonp(sheetUrl, sheetName, gid) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `__sheetCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Google Sheet 讀取逾時"));
+    }, 15000);
+
+    window[callbackName] = (payload) => {
+      cleanup();
+      if (payload.status !== "ok") {
+        reject(new Error("Google Sheet 回應錯誤，請確認分享權限與分頁名稱"));
+        return;
+      }
+      resolve(tableToCsv(payload.table));
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("無法讀取 Google Sheet，請確認分享權限"));
+    };
+    script.src = buildGvizUrl(sheetUrl, sheetName, gid, callbackName);
+    document.head.appendChild(script);
+
+    function cleanup() {
+      window.clearTimeout(timeout);
+      delete window[callbackName];
+      script.remove();
+    }
+  });
+}
+
+function tableToCsv(table) {
+  const headerRow = table.cols.map((column) => column.label || "");
+  const dataRows = table.rows.map((row) => table.cols.map((_, index) => cellToText(row.c?.[index])));
+  return [headerRow, ...dataRows].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+}
+
+function cellToText(cell) {
+  if (!cell) {
+    return "";
+  }
+  return cell.f ?? cell.v ?? "";
+}
+
+function escapeCsvCell(value) {
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function isStaticHosted() {
+  return location.hostname.endsWith("github.io");
 }
 
 function parseCsvRows(csvText) {
