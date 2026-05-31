@@ -15,7 +15,21 @@
       <div class="header-meta">
         <span id="sourceStatus">尚未連結資料</span>
         <span id="updatedAt">--</span>
-        <button type="button" id="refreshData" class="header-action">重新整理資料</button>
+        <div class="header-actions">
+          <button type="button" id="privacyToggle" class="icon-action" aria-pressed="false" aria-label="隱藏金額">
+            <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 3l18 18" />
+              <path d="M10.6 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.2-5" />
+              <path d="M7.5 7.8C4.4 9.5 2.5 12 2.5 12s3.5 6 9.5 6c1.7 0 3.1-.5 4.4-1.2" />
+              <path d="M12.6 6C18.1 6.3 21.5 12 21.5 12s-.8 1.4-2.2 2.8" />
+            </svg>
+          </button>
+          <button type="button" id="refreshData" class="header-action">重新整理資料</button>
+        </div>
       </div>
     </header>
 

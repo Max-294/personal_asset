@@ -1,20 +1,20 @@
 :root {
   color-scheme: light;
-  --bg: #f7efe3;
-  --surface: #fffaf2;
-  --surface-strong: #efe0ca;
-  --ink: #2f2922;
-  --muted: #756a5f;
-  --line: #dbc8ad;
-  --accent: #9f6f45;
-  --accent-dark: #6f4c2f;
-  --green: #5f8061;
-  --blue: #5e7896;
-  --rose: #b16d63;
-  --gold: #bf8f3c;
-  --shadow: 0 16px 36px rgba(94, 69, 43, 0.12);
+  --bg: #f4efe5;
+  --surface: #fffdf8;
+  --surface-strong: #ebe2d2;
+  --ink: #172b25;
+  --muted: #68766f;
+  --line: #d9ccb7;
+  --accent: #b89455;
+  --accent-dark: #123c34;
+  --green: #214d42;
+  --blue: #496f83;
+  --rose: #9f6c64;
+  --gold: #c6a464;
+  --shadow: 0 18px 44px rgba(18, 60, 52, 0.12);
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    ui-serif, Georgia, "Times New Roman", "Noto Serif TC", "PingFang TC",
     "Microsoft JhengHei", sans-serif;
 }
 
@@ -27,7 +27,8 @@ body {
   margin: 0;
   color: var(--ink);
   background:
-    linear-gradient(180deg, rgba(255, 250, 242, 0.86), rgba(247, 239, 227, 0.92)),
+    radial-gradient(circle at 12% 0%, rgba(184, 148, 85, 0.16), transparent 34%),
+    linear-gradient(180deg, #fffdf8 0%, #f4efe5 48%, #ede3d1 100%),
     var(--bg);
 }
 
@@ -42,13 +43,21 @@ input {
   justify-content: space-between;
   gap: 24px;
   padding: 40px clamp(20px, 5vw, 72px) 24px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 250, 242, 0.82);
+  border-bottom: 1px solid rgba(198, 164, 100, 0.34);
+  color: #f8f3e8;
+  background:
+    linear-gradient(135deg, rgba(18, 60, 52, 0.98), rgba(22, 73, 62, 0.94)),
+    var(--accent-dark);
+  box-shadow: 0 18px 44px rgba(18, 60, 52, 0.16);
+}
+
+.app-header > div:first-child {
+  min-width: min(520px, 56vw);
 }
 
 .eyebrow {
   margin: 0 0 8px;
-  color: var(--accent-dark);
+  color: #d7bd7b;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -63,8 +72,10 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(1.85rem, 3vw, 3rem);
+  font-size: clamp(1.8rem, 2.7vw, 2.7rem);
   letter-spacing: 0;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 h2 {
@@ -78,16 +89,60 @@ h2 {
   gap: 6px;
   justify-items: end;
   min-width: 180px;
-  color: var(--muted);
+  color: rgba(248, 243, 232, 0.78);
   font-size: 0.9rem;
   text-align: right;
 }
 
 .header-action {
-  height: 34px;
-  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  margin: 0;
   padding: 0 12px;
+  border: 1px solid transparent;
   font-size: 0.86rem;
+  color: #15382f;
+  background: linear-gradient(180deg, #d6b66f, #b89455);
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  color: #15382f;
+  border: 1px solid rgba(214, 182, 111, 0.7);
+  background: rgba(248, 243, 232, 0.9);
+}
+
+.icon-action svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.icon-action .eye-closed,
+.is-private .icon-action .eye-open {
+  display: none;
+}
+
+.is-private .icon-action .eye-closed {
+  display: block;
 }
 
 main {
@@ -95,37 +150,49 @@ main {
   gap: 24px;
   width: min(1180px, calc(100% - 40px));
   margin: 28px auto 56px;
+  min-width: 0;
 }
 
 .view-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  border-bottom: 1px solid var(--line);
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(18, 60, 52, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.72);
+  box-shadow: 0 10px 30px rgba(18, 60, 52, 0.06);
 }
 
 .tab-button {
   height: 40px;
   border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: 6px 6px 0 0;
+  border-radius: 6px;
   padding: 0 16px;
-  color: var(--muted);
+  color: #4f635b;
   background: transparent;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 .tab-button.is-active {
-  color: var(--accent-dark);
-  border-color: var(--line);
-  background: var(--surface);
+  color: #f8f3e8;
+  border-color: rgba(18, 60, 52, 0.18);
+  background: var(--accent-dark);
   font-weight: 800;
+  box-shadow: 0 8px 18px rgba(18, 60, 52, 0.12);
 }
 
 .panel,
 .metric {
-  border: 1px solid rgba(159, 111, 69, 0.2);
+  border: 1px solid rgba(18, 60, 52, 0.12);
   border-radius: 8px;
-  background: var(--surface);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(250, 246, 237, 0.94)),
+    var(--surface);
   box-shadow: var(--shadow);
 }
 
@@ -146,11 +213,14 @@ input {
   color: var(--ink);
   background: #fffdf8;
   outline: none;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(159, 111, 69, 0.16);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(184, 148, 85, 0.18);
 }
 
 button {
@@ -161,6 +231,9 @@ button {
   color: #fff;
   background: var(--accent-dark);
   cursor: pointer;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 button.secondary {
@@ -173,6 +246,7 @@ button.secondary {
 .dashboard-grid {
   display: grid;
   gap: 18px;
+  min-width: 0;
 }
 
 .summary-grid {
@@ -181,12 +255,25 @@ button.secondary {
 
 .metric {
   padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--gold), var(--accent-dark));
+  content: "";
 }
 
 .metric span,
 .panel-header span {
   color: var(--muted);
   font-size: 0.88rem;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 .metric strong {
@@ -194,6 +281,8 @@ button.secondary {
   margin-top: 8px;
   font-size: clamp(1.3rem, 2vw, 1.85rem);
   letter-spacing: 0;
+  font-weight: 750;
+  color: var(--accent-dark);
 }
 
 .dashboard-grid {
@@ -202,6 +291,7 @@ button.secondary {
 
 .panel {
   padding: 22px;
+  min-width: 0;
 }
 
 .panel-header {
@@ -230,13 +320,16 @@ button.secondary {
   border-radius: 50%;
   background: conic-gradient(var(--surface-strong) 0 100%);
   position: relative;
+  box-shadow:
+    inset 0 0 0 1px rgba(18, 60, 52, 0.08),
+    0 16px 28px rgba(18, 60, 52, 0.08);
 }
 
 .donut-chart::after {
   position: absolute;
   inset: 34px;
   border-radius: 50%;
-  background: var(--surface);
+  background: #fffdf8;
   content: "";
 }
 
@@ -259,6 +352,9 @@ button.secondary {
   gap: 10px;
   color: var(--muted);
   font-size: 0.92rem;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 .legend-name {
@@ -279,7 +375,7 @@ button.secondary {
   overflow: hidden;
   height: 10px;
   border-radius: 999px;
-  background: #eadbc7;
+  background: #e7dece;
 }
 
 .bar-fill {
@@ -319,18 +415,21 @@ button.secondary {
 }
 
 .chart-bg {
-  fill: #fff7eb;
-  stroke: #eadbc7;
+  fill: #fffaf1;
+  stroke: #ded3c2;
 }
 
 .line-chart .grid-line {
-  stroke: #eadbc7;
+  stroke: #ddd2bf;
   stroke-dasharray: 5 8;
 }
 
 .line-chart text {
   fill: var(--muted);
   font-size: 12px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 .line-chart polyline {
@@ -377,7 +476,7 @@ button.secondary {
 
 .latest-label rect {
   fill: rgba(255, 253, 248, 0.92);
-  stroke: #eadbc7;
+  stroke: #d8c59f;
 }
 
 .latest-label text {
@@ -402,6 +501,7 @@ button.secondary {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: #fffdf8;
+  box-shadow: 0 8px 18px rgba(18, 60, 52, 0.06);
 }
 
 .line-legend i {
@@ -428,6 +528,7 @@ button.secondary {
 }
 
 .table-wrap {
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -439,16 +540,25 @@ table {
 
 th,
 td {
-  border-bottom: 1px solid #eadbc7;
+  border-bottom: 1px solid #e3d8c7;
   padding: 13px 10px;
   text-align: left;
   vertical-align: middle;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 th {
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 800;
+  white-space: nowrap;
+  background: rgba(18, 60, 52, 0.035);
+}
+
+tbody tr:hover {
+  background: rgba(184, 148, 85, 0.08);
 }
 
 .sort-button {
@@ -467,10 +577,15 @@ th {
   text-align: inherit;
 }
 
+th.numeric .sort-button {
+  justify-content: flex-end;
+}
+
 .sort-button::after {
-  color: #b8a58d;
+  color: #a98a4f;
   content: "↕";
   font-size: 0.76rem;
+  line-height: 1;
 }
 
 .sort-button.is-active {
@@ -491,12 +606,40 @@ td {
 
 .numeric {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  white-space: nowrap;
 }
 
 .empty {
   padding: 32px 12px;
   color: var(--muted);
   text-align: center;
+}
+
+.is-private .privacy-mask {
+  color: transparent !important;
+  position: relative;
+}
+
+.is-private .privacy-mask::after {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  content: "***";
+}
+
+.is-private .metric .privacy-mask::after,
+.is-private .line-legend .privacy-mask::after {
+  justify-content: flex-start;
+}
+
+.is-private td.numeric.privacy-mask::after {
+  justify-content: flex-end;
+  padding-right: 10px;
 }
 
 @media (max-width: 920px) {
@@ -510,9 +653,21 @@ td {
     display: grid;
   }
 
+  .app-header > div:first-child {
+    min-width: 0;
+  }
+
+  h1 {
+    white-space: normal;
+  }
+
   .header-meta {
     justify-items: start;
     text-align: left;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
   }
 
   .summary-grid {

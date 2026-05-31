@@ -6,7 +6,7 @@ const sampleRows = [
   { assetClass: "基金", assetName: "全球科技基金", account: "銀行信託", quantity: 350, price: 21.4, value: 7490, currency: "TWD" },
 ];
 
-const palette = ["#9f6f45", "#5f8061", "#5e7896", "#b16d63", "#bf8f3c", "#7d6a8f", "#4f817d"];
+const palette = ["#123c34", "#b89455", "#4f7466", "#8a5f37", "#6b7f93", "#9f6c64", "#2f5f52"];
 const numericSortKeys = new Set([
   "quantity",
   "price",
@@ -83,6 +83,7 @@ let tableSort = {
   key: "dateValue",
   direction: "desc",
 };
+let privacyMode = localStorage.getItem("assetDashboardPrivacy") === "hidden";
 
 const viewConfigs = {
   overview: {
@@ -178,6 +179,7 @@ viewConfigs.realizedUs.tableColumns = realizedColumns;
 
 const elements = {
   refreshData: document.querySelector("#refreshData"),
+  privacyToggle: document.querySelector("#privacyToggle"),
   tabButtons: document.querySelectorAll(".tab-button"),
   sourceStatus: document.querySelector("#sourceStatus"),
   updatedAt: document.querySelector("#updatedAt"),
@@ -203,6 +205,12 @@ const elements = {
 };
 
 elements.refreshData.addEventListener("click", loadFixedSources);
+elements.privacyToggle.addEventListener("click", () => {
+  privacyMode = !privacyMode;
+  localStorage.setItem("assetDashboardPrivacy", privacyMode ? "hidden" : "visible");
+  updatePrivacyMode();
+  applyPrivacyMasks();
+});
 
 elements.tabButtons.forEach((button) => {
   button.addEventListener("click", () => {
@@ -228,6 +236,7 @@ elements.tableHead.addEventListener("click", (event) => {
   renderTable(currentRows, elements.tableSearch.value);
 });
 
+updatePrivacyMode();
 renderView();
 loadFixedSources();
 
@@ -909,6 +918,7 @@ function renderDashboard(rows) {
   }
   renderTableHead();
   renderTable(rows, elements.tableSearch.value);
+  applyPrivacyMasks();
 }
 
 function renderOverviewDashboard(rows, config) {
@@ -936,6 +946,7 @@ function renderOverviewDashboard(rows, config) {
   renderLineChart(rows);
   renderTableHead();
   renderTable(rows, elements.tableSearch.value);
+  applyPrivacyMasks();
 }
 
 function renderView() {
@@ -1137,12 +1148,12 @@ function renderLineChart(rows) {
       <svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="每月資產變化曲線">
         <defs>
           <linearGradient id="grossAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#5e7896" stop-opacity="0.22" />
-            <stop offset="100%" stop-color="#5e7896" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="#496f83" stop-opacity="0.22" />
+            <stop offset="100%" stop-color="#496f83" stop-opacity="0.02" />
           </linearGradient>
           <linearGradient id="netAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#9f6f45" stop-opacity="0.2" />
-            <stop offset="100%" stop-color="#9f6f45" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="#b89455" stop-opacity="0.24" />
+            <stop offset="100%" stop-color="#b89455" stop-opacity="0.03" />
           </linearGradient>
         </defs>
         <rect class="chart-bg" x="${padding.left}" y="${padding.top}" width="${width - padding.left - padding.right}" height="${height - padding.top - padding.bottom}" rx="12" />
@@ -1152,7 +1163,7 @@ function renderLineChart(rows) {
             const value = maxValue - ratio * range;
             return `
               <line class="grid-line" x1="${padding.left}" y1="${gridY}" x2="${width - padding.right}" y2="${gridY}" />
-              <text x="${padding.left - 10}" y="${gridY + 4}" text-anchor="end">${formatCompactMoney(value)}</text>
+              <text class="axis-value" x="${padding.left - 10}" y="${gridY + 4}" text-anchor="end">${formatCompactMoney(value)}</text>
             `;
           })
           .join("")}
@@ -1222,6 +1233,56 @@ function renderTable(rows, query = "") {
       `,
     )
     .join("");
+  applyPrivacyMasks();
+}
+
+function updatePrivacyMode() {
+  document.body.classList.toggle("is-private", privacyMode);
+  elements.privacyToggle.setAttribute("aria-pressed", String(privacyMode));
+  elements.privacyToggle.setAttribute("aria-label", privacyMode ? "顯示金額" : "隱藏金額");
+  elements.privacyToggle.title = privacyMode ? "顯示金額" : "隱藏金額";
+}
+
+function applyPrivacyMasks() {
+  document.querySelectorAll(".privacy-mask").forEach((element) => {
+    restoreSvgPrivateText(element);
+    element.classList.remove("privacy-mask");
+  });
+  document
+    .querySelectorAll(
+      [
+        ".metric strong",
+        ".legend-line:last-child span",
+        ".bar-meta span",
+        ".line-legend span",
+        ".latest-label text",
+        ".axis-value",
+        "td.numeric",
+      ].join(", "),
+    )
+    .forEach((element) => {
+      updateSvgPrivateText(element);
+      element.classList.add("privacy-mask");
+    });
+}
+
+function updateSvgPrivateText(element) {
+  if (element.namespaceURI !== "http://www.w3.org/2000/svg" || element.tagName.toLowerCase() !== "text") {
+    return;
+  }
+  if (!element.dataset.publicText) {
+    element.dataset.publicText = element.textContent;
+  }
+  element.textContent = privacyMode ? "***" : element.dataset.publicText;
+}
+
+function restoreSvgPrivateText(element) {
+  if (element.namespaceURI !== "http://www.w3.org/2000/svg" || element.tagName.toLowerCase() !== "text") {
+    return;
+  }
+  if (element.dataset.publicText) {
+    element.textContent = element.dataset.publicText;
+  }
 }
 
 function formatCurrencyValue(value, currency) {
