@@ -69,6 +69,12 @@ const dataSources = {
     sheetName: "「2337旺宏」的副本",
     gid: "629946088",
   },
+  dividendHistory: {
+    sheetUrl:
+      "https://docs.google.com/spreadsheets/d/1INZO4qzBoqy3WeKf-YQIrQW5VApO9hz8_FT4ewvvtT8/edit?gid=1172399332#gid=1172399332",
+    sheetName: "股利減資借券紀錄",
+    gid: "1172399332",
+  },
 };
 let currentRows = [];
 let currentView = "overview";
@@ -78,6 +84,7 @@ let viewData = {
   holdings: [],
   realizedTw: [],
   realizedUs: [],
+  dividendIncome: [],
 };
 let dailyProfitState = {
   status: "idle",
@@ -124,8 +131,8 @@ const viewConfigs = {
     thirdLabel: "帳戶數",
     fourthLabel: "最大配置",
     allocationTitle: "資產配置",
-    barTitle: "帳戶分布",
-    barSubtitle: "依目前市值",
+    barTitle: "市場分布",
+    barSubtitle: "台股與美股市值",
     detailTitle: "資產明細",
     totalLabel: (value) => formatMoney(value),
     defaultSort: { key: "baseValue", direction: "desc" },
@@ -275,7 +282,7 @@ async function loadFixedSources() {
       dataSources.usSummary.gid,
       foreignQuoteRows,
     );
-    const [realizedTaiwanRows, realizedTaiwanWarrantRows, realizedTaiwanMacronixRows] = await Promise.all([
+    const [realizedTaiwanRows, realizedTaiwanWarrantRows, realizedTaiwanMacronixRows, dividendIncomeRows] = await Promise.all([
       fetchRealizedRows(
         dataSources.realizedTaiwan.sheetUrl,
         dataSources.realizedTaiwan.sheetName,
@@ -293,6 +300,11 @@ async function loadFixedSources() {
         dataSources.realizedTaiwanMacronix.sheetName,
         dataSources.realizedTaiwanMacronix.gid,
       ),
+      fetchDividendIncomeRows(
+        dataSources.dividendHistory.sheetUrl,
+        dataSources.dividendHistory.sheetName,
+        dataSources.dividendHistory.gid,
+      ),
     ]);
     const mergedRealizedTaiwanRows = mergeMacronixIntoTaiwanRealizedRows(
       realizedTaiwanRows,
@@ -304,6 +316,7 @@ async function loadFixedSources() {
       holdings: [...taiwanRows, ...usSummary.holdings].filter((row) => row.baseValue > 0 && row.quantity > 0),
       realizedTw: [...mergedRealizedTaiwanRows, ...realizedTaiwanWarrantRows],
       realizedUs: usSummary.realized,
+      dividendIncome: dividendIncomeRows,
     };
     resetDailyProfitState();
     renderView();
@@ -364,6 +377,14 @@ async function fetchMacronixRealizedRows(sheetUrl, sheetName, gid) {
   const rows = parseCsvRows(csv);
   const summaryRow = rows.find((row) => toNumber(row[21]) !== 0 && toNumber(row[20]) !== 0);
   return summaryRow ? [normalizeMacronixRow(summaryRow)] : [];
+}
+
+async function fetchDividendIncomeRows(sheetUrl, sheetName, gid) {
+  const csv = await fetchSheetCsv(sheetUrl, sheetName, gid);
+  return parseCsvRows(csv)
+    .slice(1)
+    .map(normalizeDividendIncomeRow)
+    .filter((row) => row.year && row.value > 0);
 }
 
 async function fetchSheetCsv(sheetUrl, sheetName, gid) {
@@ -945,6 +966,14 @@ function normalizeMacronixRow(row) {
   };
 }
 
+function normalizeDividendIncomeRow(row) {
+  return {
+    year: String(row[0] || "").trim(),
+    assetName: String(row[1] || "").trim(),
+    value: toNumber(row[2]),
+  };
+}
+
 function mergeMacronixIntoTaiwanRealizedRows(rows, macronixRows) {
   if (!macronixRows.length) {
     return rows;
@@ -1047,6 +1076,7 @@ function renderDashboard(rows) {
   const chartTotal = isRealizedView ? sumAbs(chartRows, "baseValue") : sum(chartRows, "baseValue");
   const byClass = groupSum(chartRows, "assetClass", isRealizedView);
   const byAccount = groupSum(chartRows, "account");
+  const distributionGroup = currentView === "holdings" ? byClass : byAccount;
   const largestRow = [...rows].sort((a, b) => b.baseValue - a.baseValue)[0];
 
   elements.primaryMetricLabel.textContent = config.primaryLabel;
@@ -1072,7 +1102,7 @@ function renderDashboard(rows) {
   if (isRealizedView) {
     renderProfitLossRanking(rows);
   } else {
-    renderBars(byAccount, chartTotal);
+    renderBars(distributionGroup, chartTotal);
   }
   renderTableHead();
   renderTable(rows, elements.tableSearch.value);
@@ -1278,6 +1308,7 @@ function renderProfitLossRanking(rows) {
   elements.accountBars.innerHTML = `
     ${renderRankingSection("獲利前五", profits, maxValue, "#5f8061")}
     ${renderRankingSection("虧損前五", losses, maxValue, "#b16d63")}
+    ${currentView === "realizedTw" ? renderAnnualDividendChart(viewData.dividendIncome) : ""}
   `;
 }
 
@@ -1305,6 +1336,51 @@ function renderRankingSection(title, rows, maxValue, color) {
     <div class="ranking-section">
       <h3>${escapeHtml(title)}</h3>
       ${body}
+    </div>
+  `;
+}
+
+function renderAnnualDividendChart(rows) {
+  const grouped = rows.reduce((map, row) => {
+    map.set(row.year, (map.get(row.year) || 0) + row.value);
+    return map;
+  }, new Map());
+  const entries = [...grouped.entries()]
+    .filter(([year, value]) => /^\d{4}$/.test(year) && value > 0)
+    .sort((a, b) => Number(a[0]) - Number(b[0]));
+  const maxValue = Math.max(...entries.map(([, value]) => value), 0);
+
+  if (!entries.length || !maxValue) {
+    return `
+      <div class="ranking-section dividend-section">
+        <h3>年度股息收入</h3>
+        <p class="empty compact-empty">尚無股息資料</p>
+      </div>
+    `;
+  }
+
+  const body = entries
+    .map(([year, value], index) => {
+      const percent = (value / maxValue) * 100;
+      const color = palette[(index + 2) % palette.length];
+      return `
+        <div class="bar-row compact-bar">
+          <div class="bar-meta">
+            <strong>${escapeHtml(year)}</strong>
+            <span>${formatMoney(value)}</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${percent}%; background:${color}"></div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="ranking-section dividend-section">
+      <h3>年度股息收入</h3>
+      <div class="dividend-bars">${body}</div>
     </div>
   `;
 }

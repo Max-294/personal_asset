@@ -403,6 +403,18 @@ button.secondary {
   font-size: 0.98rem;
 }
 
+.dividend-bars {
+  display: grid;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.compact-bar .bar-track {
+  height: 8px;
+}
+
 .compact-empty {
   margin: 0;
 }
