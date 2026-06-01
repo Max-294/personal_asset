@@ -79,6 +79,12 @@ let viewData = {
   realizedTw: [],
   realizedUs: [],
 };
+let dailyProfitState = {
+  status: "idle",
+  taiwan: null,
+  us: null,
+};
+let dailyProfitRequestId = 0;
 let tableSort = {
   key: "dateValue",
   direction: "desc",
@@ -191,6 +197,11 @@ const elements = {
   assetClassCount: document.querySelector("#assetClassCount"),
   accountCount: document.querySelector("#accountCount"),
   largestClass: document.querySelector("#largestClass"),
+  extraMetrics: document.querySelectorAll(".extra-metric"),
+  fifthMetricLabel: document.querySelector("#fifthMetricLabel"),
+  sixthMetricLabel: document.querySelector("#sixthMetricLabel"),
+  taiwanTodayProfit: document.querySelector("#taiwanTodayProfit"),
+  usTodayProfit: document.querySelector("#usTodayProfit"),
   allocationTitle: document.querySelector("#allocationTitle"),
   allocationTotal: document.querySelector("#allocationTotal"),
   barTitle: document.querySelector("#barTitle"),
@@ -294,7 +305,9 @@ async function loadFixedSources() {
       realizedTw: [...mergedRealizedTaiwanRows, ...realizedTaiwanWarrantRows],
       realizedUs: usSummary.realized,
     };
+    resetDailyProfitState();
     renderView();
+    loadDailyHoldingProfit(viewData.holdings);
     const usdRate = foreignQuoteRows.find((row) => row.currency === "USD")?.exchangeRate;
     setStatus(
       `已載入：資產總覽 ${viewData.overview.length} 筆，目前持股 ${viewData.holdings.length} 筆，台股已實現 ${viewData.realizedTw.length} 筆，美股已實現 ${viewData.realizedUs.length} 筆${usdRate ? `，USD/TWD ${usdRate}` : ""}`,
@@ -389,6 +402,31 @@ function buildSheetApiUrl(sheetUrl, sheetName, gid) {
     params.set("sheetName", sheetName);
   }
   return `/api/sheet?${params.toString()}`;
+}
+
+async function fetchMarketText(url) {
+  const candidates = [];
+  if (!isStaticHosted() && location.protocol !== "file:") {
+    candidates.push(`/api/proxy?url=${encodeURIComponent(url)}`);
+  }
+  if (!(location.protocol === "https:" && url.startsWith("http:"))) {
+    candidates.push(url);
+  }
+  candidates.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+
+  let lastError;
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(candidate, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`行情來源回應錯誤：${response.status}`);
+      }
+      return response.text();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("行情來源讀取失敗");
 }
 
 function buildGvizUrl(sheetUrl, sheetName, gid, callbackName) {
@@ -549,6 +587,7 @@ function normalizeTaiwanStockRow(row) {
   const isTaiwanStock = Boolean(stockCode || stockName);
 
   return {
+    ticker: stockCode,
     assetClass: readColumn(row, ["資產類別", "類別", "市場", "assetClass", "Asset Class", "分類"]) || (isTaiwanStock ? "台股" : "未分類"),
     assetName: assetName || "未命名資產",
     account: readColumn(row, ["帳戶", "券商", "銀行", "account", "Account"]) || (isTaiwanStock ? "台股持股" : "未指定帳戶"),
@@ -575,6 +614,7 @@ function parseForeignAccountRows(rows) {
       const baseValue = value * usdToTwd;
 
       return {
+        ticker: symbol,
         assetClass: "美股",
         assetName: symbol,
         account: "外幣帳戶",
@@ -661,6 +701,7 @@ function parseUsSummaryRows(rows, quoteRows) {
       const price = priceBySymbol.get(symbol) || (quantity ? cost / quantity : 0);
       const value = quantity * price;
       return {
+        ticker: symbol,
         assetClass: "美股",
         assetName: symbol,
         account: "美股Summary",
@@ -698,6 +739,95 @@ function isUsSummaryTransactionRow(row) {
 
 function isUsSummaryLotAddition(type) {
   return type === "買進" || type.includes("拆") || type.includes("分割") || type.includes("無成本");
+}
+
+function resetDailyProfitState() {
+  dailyProfitState = {
+    status: "loading",
+    taiwan: null,
+    us: null,
+  };
+  dailyProfitRequestId += 1;
+}
+
+async function loadDailyHoldingProfit(rows) {
+  const requestId = dailyProfitRequestId;
+  try {
+    const [taiwan, us] = await Promise.all([fetchTaiwanDailyProfit(rows), fetchUsDailyProfit(rows)]);
+    if (requestId !== dailyProfitRequestId) {
+      return;
+    }
+    dailyProfitState = {
+      status: "ready",
+      taiwan,
+      us,
+    };
+  } catch (error) {
+    console.warn(error);
+    if (requestId !== dailyProfitRequestId) {
+      return;
+    }
+    dailyProfitState = {
+      status: "error",
+      taiwan: null,
+      us: null,
+    };
+  }
+
+  if (currentView === "holdings") {
+    renderDashboard(viewData.holdings);
+  }
+}
+
+async function fetchTaiwanDailyProfit(rows) {
+  const holdings = rows.filter((row) => row.assetClass === "台股" && row.ticker && row.quantity > 0);
+  if (!holdings.length) {
+    return 0;
+  }
+
+  const codes = [...new Set(holdings.map((row) => row.ticker))];
+  const quotes = new Map();
+  const chunkSize = 20;
+  for (let index = 0; index < codes.length; index += chunkSize) {
+    const chunk = codes.slice(index, index + chunkSize);
+    const exCh = chunk.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]).join("|");
+    const url = `http://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`;
+    const text = await fetchMarketText(url);
+    const data = JSON.parse(text.trim());
+    (data.msgArray || []).forEach((quote) => {
+      const code = String(quote.c || "").trim();
+      const currentPrice = toNumber(quote.z) || toNumber(quote.pz) || toNumber(quote.o);
+      const previousClose = toNumber(quote.y);
+      if (code && currentPrice > 0 && previousClose > 0) {
+        quotes.set(code, currentPrice - previousClose);
+      }
+    });
+  }
+
+  return holdings.reduce((total, row) => total + (quotes.get(row.ticker) || 0) * row.quantity, 0);
+}
+
+async function fetchUsDailyProfit(rows) {
+  const holdings = rows.filter((row) => row.assetClass === "美股" && row.ticker && row.quantity > 0);
+  if (!holdings.length) {
+    return 0;
+  }
+
+  const quotePairs = await Promise.all(
+    [...new Set(holdings.map((row) => row.ticker))].map(async (symbol) => {
+      const stooqSymbol = `${symbol.toLowerCase()}.us`;
+      const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcvp&h&e=csv`;
+      const csv = await fetchMarketText(url);
+      const rows = parseCsvRows(csv);
+      const record = rowsToObjects(rows)[0] || {};
+      const close = toNumber(readColumn(record, ["Close"]));
+      const previousClose = toNumber(readColumn(record, ["Prev"]));
+      return [symbol, close > 0 && previousClose > 0 ? close - previousClose : 0];
+    }),
+  );
+  const quotes = new Map(quotePairs);
+
+  return holdings.reduce((total, row) => total + (quotes.get(row.ticker) || 0) * row.quantity * row.exchangeRate, 0);
 }
 
 function getRealizedBucket(map, symbol) {
@@ -909,6 +1039,7 @@ function renderDashboard(rows) {
   elements.largestClass.textContent = largestRow ? largestRow.assetName : "--";
   elements.allocationTotal.textContent = rows.length ? config.totalLabel(total) : "--";
   elements.updatedAt.textContent = rows.length ? new Date().toLocaleString("zh-TW") : "--";
+  renderExtraMetrics(rows);
 
   renderDonut(byClass, chartTotal);
   if (isRealizedView) {
@@ -941,12 +1072,49 @@ function renderOverviewDashboard(rows, config) {
   elements.largestClass.textContent = latest ? formatSignedMoney(latest.difference) : "--";
   elements.allocationTotal.textContent = latest ? latest.dateLabel : "--";
   elements.updatedAt.textContent = rows.length ? new Date().toLocaleString("zh-TW") : "--";
+  hideExtraMetrics();
 
   renderDonut(new Map(composition.map((item) => [item.name, item.value])), compositionTotal);
   renderLineChart(rows);
   renderTableHead();
   renderTable(rows, elements.tableSearch.value);
   applyPrivacyMasks();
+}
+
+function renderExtraMetrics(rows) {
+  if (currentView !== "holdings") {
+    hideExtraMetrics();
+    return;
+  }
+
+  elements.extraMetrics.forEach((metric) => {
+    metric.classList.remove("is-hidden");
+  });
+  elements.fifthMetricLabel.textContent = "今日台股損益";
+  elements.sixthMetricLabel.textContent = "今日美股損益";
+  elements.taiwanTodayProfit.textContent = formatDailyProfitValue(dailyProfitState.taiwan, rows);
+  elements.usTodayProfit.textContent = formatDailyProfitValue(dailyProfitState.us, rows);
+}
+
+function hideExtraMetrics() {
+  elements.extraMetrics.forEach((metric) => {
+    metric.classList.add("is-hidden");
+  });
+  elements.taiwanTodayProfit.textContent = "--";
+  elements.usTodayProfit.textContent = "--";
+}
+
+function formatDailyProfitValue(value, rows) {
+  if (!rows.length || dailyProfitState.status === "idle") {
+    return "--";
+  }
+  if (dailyProfitState.status === "loading") {
+    return "查詢中";
+  }
+  if (dailyProfitState.status === "error" || value === null) {
+    return "--";
+  }
+  return formatSignedMoney(value);
 }
 
 function renderView() {

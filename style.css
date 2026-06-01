@@ -250,13 +250,17 @@ button.secondary {
 }
 
 .summary-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .metric {
   padding: 20px;
   position: relative;
   overflow: hidden;
+}
+
+.metric.is-hidden {
+  display: none;
 }
 
 .metric::before {

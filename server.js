@@ -21,6 +21,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (requestUrl.pathname === "/api/proxy") {
+      await handleProxyRequest(requestUrl, res);
+      return;
+    }
+
     serveStatic(requestUrl.pathname, res);
   } catch (error) {
     console.error(error);
@@ -70,6 +75,32 @@ async function handleSheetRequest(requestUrl, res) {
   res.end(csv);
 }
 
+async function handleProxyRequest(requestUrl, res) {
+  const target = requestUrl.searchParams.get("url") || "";
+  let targetUrl;
+
+  try {
+    targetUrl = new URL(target);
+  } catch {
+    sendText(res, 400, "無法解析代理網址");
+    return;
+  }
+
+  const allowedHosts = new Set(["mis.twse.com.tw", "stooq.com"]);
+  if (!allowedHosts.has(targetUrl.hostname)) {
+    sendText(res, 403, "此代理僅允許行情資料來源");
+    return;
+  }
+
+  const body = await fetchText(targetUrl.toString());
+  res.writeHead(200, {
+    "content-type": targetUrl.hostname === "stooq.com" ? "text/csv; charset=utf-8" : "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "access-control-allow-origin": "*",
+  });
+  res.end(body);
+}
+
 function serveStatic(pathname, res) {
   const decodedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
   const filePath = path.join(root, decodedPath);
@@ -98,7 +129,8 @@ function extractSheetId(sheetUrl) {
 
 function fetchText(url, redirectCount = 0) {
   return new Promise((resolve, reject) => {
-    https
+    const client = new URL(url).protocol === "http:" ? http : https;
+    client
       .get(url, (response) => {
         const location = response.headers.location;
         if (response.statusCode >= 300 && response.statusCode < 400 && location) {
