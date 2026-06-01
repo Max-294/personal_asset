@@ -412,21 +412,46 @@ async function fetchMarketText(url) {
   if (!(location.protocol === "https:" && url.startsWith("http:"))) {
     candidates.push(url);
   }
+  candidates.push(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
+  if (url.startsWith("https:")) {
+    candidates.push(`https://r.jina.ai/http://r.jina.ai/http://${url}`);
+  }
   candidates.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
 
   let lastError;
   for (const candidate of candidates) {
     try {
-      const response = await fetch(candidate, { cache: "no-store" });
+      const response = await fetchWithTimeout(candidate, 6000);
       if (!response.ok) {
         throw new Error(`行情來源回應錯誤：${response.status}`);
       }
-      return response.text();
+      const text = await response.text();
+      if (looksLikeProxyFailure(text)) {
+        throw new Error("行情代理回應無效");
+      }
+      return text;
     } catch (error) {
       lastError = error;
     }
   }
   throw lastError || new Error("行情來源讀取失敗");
+}
+
+function fetchWithTimeout(url, timeout = 6000) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeout);
+  return fetch(url, {
+    cache: "no-store",
+    signal: controller.signal,
+  }).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
+function looksLikeProxyFailure(text) {
+  return /Exceeded the daily hits limit|not a valid resource|Server-side requests are not allowed|Attention Required|Cloudflare/i.test(
+    text.slice(0, 500),
+  );
 }
 
 function buildGvizUrl(sheetUrl, sheetName, gid, callbackName) {
@@ -752,27 +777,23 @@ function resetDailyProfitState() {
 
 async function loadDailyHoldingProfit(rows) {
   const requestId = dailyProfitRequestId;
-  try {
-    const [taiwan, us] = await Promise.all([fetchTaiwanDailyProfit(rows), fetchUsDailyProfit(rows)]);
-    if (requestId !== dailyProfitRequestId) {
-      return;
-    }
-    dailyProfitState = {
-      status: "ready",
-      taiwan,
-      us,
-    };
-  } catch (error) {
-    console.warn(error);
-    if (requestId !== dailyProfitRequestId) {
-      return;
-    }
-    dailyProfitState = {
-      status: "error",
-      taiwan: null,
-      us: null,
-    };
+  const [taiwanResult, usResult] = await Promise.allSettled([fetchTaiwanDailyProfit(rows), fetchUsDailyProfit(rows)]);
+  if (requestId !== dailyProfitRequestId) {
+    return;
   }
+
+  if (taiwanResult.status === "rejected") {
+    console.warn(taiwanResult.reason);
+  }
+  if (usResult.status === "rejected") {
+    console.warn(usResult.reason);
+  }
+
+  dailyProfitState = {
+    status: "ready",
+    taiwan: taiwanResult.status === "fulfilled" ? taiwanResult.value : null,
+    us: usResult.status === "fulfilled" ? usResult.value : null,
+  };
 
   if (currentView === "holdings") {
     renderDashboard(viewData.holdings);
@@ -818,7 +839,7 @@ async function fetchUsDailyProfit(rows) {
       const stooqSymbol = `${symbol.toLowerCase()}.us`;
       const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcvp&h&e=csv`;
       const csv = await fetchMarketText(url);
-      const rows = parseCsvRows(csv);
+      const rows = parseCsvRows(extractCsvText(csv));
       const record = rowsToObjects(rows)[0] || {};
       const close = toNumber(readColumn(record, ["Close"]));
       const previousClose = toNumber(readColumn(record, ["Prev"]));
@@ -828,6 +849,12 @@ async function fetchUsDailyProfit(rows) {
   const quotes = new Map(quotePairs);
 
   return holdings.reduce((total, row) => total + (quotes.get(row.ticker) || 0) * row.quantity * row.exchangeRate, 0);
+}
+
+function extractCsvText(text) {
+  const lines = text.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) => line.startsWith("Symbol,"));
+  return headerIndex >= 0 ? lines.slice(headerIndex).join("\n") : text;
 }
 
 function getRealizedBucket(map, symbol) {
