@@ -12,7 +12,8 @@
   --blue: #496f83;
   --rose: #9f6c64;
   --gold: #c6a464;
-  --shadow: 0 18px 44px rgba(18, 60, 52, 0.12);
+  --shadow: 0 18px 44px rgba(18, 60, 52, 0.1);
+  --soft-shadow: 0 10px 28px rgba(18, 60, 52, 0.07);
   font-family:
     ui-serif, Georgia, "Times New Roman", "Noto Serif TC", "PingFang TC",
     "Microsoft JhengHei", sans-serif;
@@ -27,8 +28,8 @@ body {
   margin: 0;
   color: var(--ink);
   background:
-    radial-gradient(circle at 12% 0%, rgba(184, 148, 85, 0.16), transparent 34%),
-    linear-gradient(180deg, #fffdf8 0%, #f4efe5 48%, #ede3d1 100%),
+    linear-gradient(180deg, rgba(18, 60, 52, 0.09), transparent 220px),
+    linear-gradient(180deg, #fffdf8 0%, #f5efe5 42%, #ece1cf 100%),
     var(--bg);
 }
 
@@ -42,13 +43,14 @@ input {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 40px clamp(20px, 5vw, 72px) 24px;
+  min-height: 188px;
+  padding: 34px clamp(20px, 5vw, 72px) 54px;
   border-bottom: 1px solid rgba(198, 164, 100, 0.34);
   color: #f8f3e8;
   background:
-    linear-gradient(135deg, rgba(18, 60, 52, 0.98), rgba(22, 73, 62, 0.94)),
+    linear-gradient(135deg, rgba(13, 45, 39, 0.99), rgba(25, 79, 66, 0.96)),
     var(--accent-dark);
-  box-shadow: 0 18px 44px rgba(18, 60, 52, 0.16);
+  box-shadow: 0 18px 44px rgba(18, 60, 52, 0.18);
 }
 
 .app-header > div:first-child {
@@ -58,7 +60,7 @@ input {
 .eyebrow {
   margin: 0 0 8px;
   color: #d7bd7b;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -72,7 +74,7 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(1.8rem, 2.7vw, 2.7rem);
+  font-size: clamp(2rem, 2.9vw, 2.85rem);
   letter-spacing: 0;
   font-weight: 700;
   white-space: nowrap;
@@ -86,9 +88,9 @@ h2 {
 
 .header-meta {
   display: grid;
-  gap: 6px;
+  gap: 7px;
   justify-items: end;
-  min-width: 180px;
+  min-width: min(460px, 44vw);
   color: rgba(248, 243, 232, 0.78);
   font-size: 0.9rem;
   text-align: right;
@@ -100,7 +102,7 @@ h2 {
   justify-content: center;
   height: 38px;
   margin: 0;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid transparent;
   font-size: 0.86rem;
   color: #15382f;
@@ -147,9 +149,9 @@ h2 {
 
 main {
   display: grid;
-  gap: 24px;
+  gap: 18px;
   width: min(1180px, calc(100% - 40px));
-  margin: 28px auto 56px;
+  margin: -34px auto 56px;
   min-width: 0;
 }
 
@@ -159,15 +161,15 @@ main {
   gap: 6px;
   max-width: 100%;
   min-width: 0;
-  padding: 6px;
+  padding: 7px;
   border: 1px solid rgba(18, 60, 52, 0.12);
   border-radius: 8px;
-  background: rgba(255, 253, 248, 0.72);
-  box-shadow: 0 10px 30px rgba(18, 60, 52, 0.06);
+  background: rgba(255, 253, 248, 0.93);
+  box-shadow: var(--soft-shadow);
 }
 
 .tab-button {
-  height: 40px;
+  height: 38px;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 0 16px;
@@ -191,7 +193,7 @@ main {
   border: 1px solid rgba(18, 60, 52, 0.12);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(250, 246, 237, 0.94)),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.99), rgba(250, 246, 237, 0.96)),
     var(--surface);
   box-shadow: var(--shadow);
 }
@@ -245,16 +247,17 @@ button.secondary {
 .summary-grid,
 .dashboard-grid {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   min-width: 0;
 }
 
 .summary-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .metric {
-  padding: 20px;
+  min-height: 126px;
+  padding: 18px 18px 16px;
   position: relative;
   overflow: hidden;
 }
@@ -267,8 +270,22 @@ button.secondary {
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
-  background: linear-gradient(180deg, var(--gold), var(--accent-dark));
+  background: linear-gradient(180deg, var(--gold), rgba(18, 60, 52, 0.8));
   content: "";
+}
+
+body[data-view="overview"] .metric:first-child {
+  grid-column: span 2;
+  color: #f8f3e8;
+  border-color: rgba(198, 164, 100, 0.35);
+  background:
+    linear-gradient(135deg, rgba(18, 60, 52, 0.98), rgba(32, 87, 72, 0.94)),
+    var(--accent-dark);
+}
+
+body[data-view="overview"] .metric:first-child::before {
+  width: 5px;
+  background: linear-gradient(180deg, #ddc07a, #b89455);
 }
 
 .metric span,
@@ -280,17 +297,36 @@ button.secondary {
     "Microsoft JhengHei", sans-serif;
 }
 
+body[data-view="overview"] .metric:first-child span,
+body[data-view="overview"] .metric:first-child strong {
+  color: #f8f3e8;
+}
+
+body[data-view="overview"] .metric:first-child span {
+  color: rgba(248, 243, 232, 0.76);
+}
+
 .metric strong {
   display: block;
-  margin-top: 8px;
-  font-size: clamp(1.3rem, 2vw, 1.85rem);
+  margin-top: 10px;
+  font-size: clamp(1.22rem, 1.6vw, 1.66rem);
   letter-spacing: 0;
   font-weight: 750;
   color: var(--accent-dark);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+body[data-view="overview"] .metric:first-child strong {
+  font-size: clamp(1.72rem, 2.5vw, 2.35rem);
+}
+
+body[data-view="holdings"] .summary-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .dashboard-grid {
-  grid-template-columns: minmax(300px, 0.9fr) minmax(300px, 1.1fr);
+  grid-template-columns: minmax(300px, 0.86fr) minmax(360px, 1.14fr);
 }
 
 .panel {
@@ -303,24 +339,25 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .panel-header h2 {
   margin-bottom: 0;
+  font-size: 1.02rem;
 }
 
 .donut-wrap {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 170px minmax(0, 1fr);
   align-items: center;
-  gap: 22px;
-  min-height: 236px;
+  gap: 20px;
+  min-height: 230px;
 }
 
 .donut-chart {
-  width: 180px;
-  height: 180px;
+  width: 170px;
+  height: 170px;
   border-radius: 50%;
   background: conic-gradient(var(--surface-strong) 0 100%);
   position: relative;
@@ -331,7 +368,7 @@ button.secondary {
 
 .donut-chart::after {
   position: absolute;
-  inset: 34px;
+  inset: 32px;
   border-radius: 50%;
   background: #fffdf8;
   content: "";
@@ -340,7 +377,7 @@ button.secondary {
 .legend,
 .bar-list {
   display: grid;
-  gap: 12px;
+  gap: 11px;
 }
 
 .legend-item,
@@ -355,7 +392,7 @@ button.secondary {
   justify-content: space-between;
   gap: 10px;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
     "Microsoft JhengHei", sans-serif;
@@ -377,7 +414,7 @@ button.secondary {
 
 .bar-track {
   overflow: hidden;
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   background: #e7dece;
 }
@@ -403,20 +440,114 @@ button.secondary {
   font-size: 0.98rem;
 }
 
-.dividend-bars {
-  display: grid;
-  gap: 10px;
-  max-height: 340px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.compact-bar .bar-track {
-  height: 8px;
-}
-
 .compact-empty {
   margin: 0;
+}
+
+.dividend-section {
+  gap: 14px;
+}
+
+.dividend-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dividend-summary span {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(18, 60, 52, 0.1);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.72);
+  font-size: 0.78rem;
+}
+
+.dividend-summary strong {
+  color: var(--accent-dark);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.dividend-trend {
+  display: grid;
+  grid-auto-columns: minmax(44px, 1fr);
+  grid-auto-flow: column;
+  align-items: end;
+  gap: 8px;
+  min-height: 230px;
+  overflow-x: auto;
+  padding: 8px 2px 4px;
+}
+
+.dividend-year {
+  display: grid;
+  grid-template-rows: 22px 132px 18px 18px;
+  align-items: end;
+  justify-items: center;
+  min-width: 44px;
+  color: var(--muted);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
+}
+
+.dividend-value,
+.dividend-change {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+}
+
+.dividend-year .dividend-value {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.dividend-column {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 126px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dividend-column i {
+  display: block;
+  width: min(26px, 68%);
+  min-height: 6px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #d1b06c, #2f5f52);
+  box-shadow: 0 8px 16px rgba(18, 60, 52, 0.1);
+}
+
+.dividend-year strong {
+  color: var(--ink);
+  font-size: 0.72rem;
+}
+
+.dividend-year .dividend-change {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.dividend-year.is-up .dividend-change,
+.dividend-summary .is-up {
+  color: #4f7466;
+}
+
+.dividend-year.is-down .dividend-change,
+.dividend-summary .is-down {
+  color: #9f6c64;
+}
+
+.dividend-year.is-flat .dividend-change {
+  color: var(--muted);
 }
 
 .line-chart-wrap {
@@ -426,7 +557,7 @@ button.secondary {
 
 .line-chart {
   width: 100%;
-  min-height: 300px;
+  min-height: 286px;
   overflow: visible;
 }
 
@@ -546,18 +677,21 @@ button.secondary {
 .table-wrap {
   max-width: 100%;
   overflow-x: auto;
+  border: 1px solid rgba(18, 60, 52, 0.08);
+  border-radius: 8px;
 }
 
 table {
   width: 100%;
   min-width: 900px;
   border-collapse: collapse;
+  background: rgba(255, 253, 248, 0.88);
 }
 
 th,
 td {
   border-bottom: 1px solid #e3d8c7;
-  padding: 13px 10px;
+  padding: 12px 12px;
   text-align: left;
   vertical-align: middle;
   font-family:
@@ -567,10 +701,13 @@ td {
 
 th {
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 800;
   white-space: nowrap;
-  background: rgba(18, 60, 52, 0.035);
+  background: rgba(18, 60, 52, 0.055);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 tbody tr:hover {
@@ -617,7 +754,7 @@ th.numeric .sort-button {
 }
 
 td {
-  font-size: 0.94rem;
+  font-size: 0.92rem;
 }
 
 .numeric {

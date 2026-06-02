@@ -1065,6 +1065,7 @@ function toPercent(value) {
 
 function renderDashboard(rows) {
   currentRows = rows;
+  document.body.dataset.view = currentView;
   const config = viewConfigs[currentView];
   if (currentView === "overview") {
     renderOverviewDashboard(rows, config);
@@ -1359,19 +1360,25 @@ function renderAnnualDividendChart(rows) {
     `;
   }
 
+  const latest = entries[entries.length - 1];
+  const previous = entries[entries.length - 2];
+  const peak = entries.reduce((best, entry) => (entry[1] > best[1] ? entry : best), entries[0]);
+  const latestDelta = previous ? latest[1] - previous[1] : 0;
   const body = entries
     .map(([year, value], index) => {
-      const percent = (value / maxValue) * 100;
-      const color = palette[(index + 2) % palette.length];
+      const percent = Math.max((value / maxValue) * 100, 4);
+      const previousValue = entries[index - 1]?.[1] || 0;
+      const delta = index ? value - previousValue : 0;
+      const trendClass = delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat";
+      const deltaLabel = index ? formatSignedMoney(delta) : "基準";
       return `
-        <div class="bar-row compact-bar">
-          <div class="bar-meta">
-            <strong>${escapeHtml(year)}</strong>
-            <span>${formatMoney(value)}</span>
+        <div class="dividend-year ${trendClass}">
+          <span class="dividend-value">${formatCompactMoney(value)}</span>
+          <div class="dividend-column" aria-label="${escapeHtml(`${year} 股息收入 ${formatMoney(value)}`)}">
+            <i style="height:${percent}%"></i>
           </div>
-          <div class="bar-track">
-            <div class="bar-fill" style="width:${percent}%; background:${color}"></div>
-          </div>
+          <strong>${escapeHtml(year)}</strong>
+          <span class="dividend-change">${escapeHtml(deltaLabel)}</span>
         </div>
       `;
     })
@@ -1380,7 +1387,12 @@ function renderAnnualDividendChart(rows) {
   return `
     <div class="ranking-section dividend-section">
       <h3>年度股息收入</h3>
-      <div class="dividend-bars">${body}</div>
+      <div class="dividend-summary">
+        <span>${escapeHtml(latest[0])} 截至目前：<strong class="dividend-value">${formatMoney(latest[1])}</strong></span>
+        <span>較前一年：<strong class="dividend-change ${latestDelta >= 0 ? "is-up" : "is-down"}">${formatSignedMoney(latestDelta)}</strong></span>
+        <span>最高 ${escapeHtml(peak[0])}：<strong class="dividend-value">${formatMoney(peak[1])}</strong></span>
+      </div>
+      <div class="dividend-trend">${body}</div>
     </div>
   `;
 }
@@ -1525,6 +1537,8 @@ function applyPrivacyMasks() {
         ".metric strong",
         ".legend-line:last-child span",
         ".bar-meta span",
+        ".dividend-value",
+        ".dividend-change",
         ".line-legend span",
         ".latest-label text",
         ".axis-value",
