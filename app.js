@@ -90,6 +90,8 @@ let dailyProfitState = {
   status: "idle",
   taiwan: null,
   us: null,
+  taiwanQuotes: new Map(),
+  usQuotes: new Map(),
 };
 let dailyProfitRequestId = 0;
 let tableSort = {
@@ -215,6 +217,8 @@ const elements = {
   barSubtitle: document.querySelector("#barSubtitle"),
   allocationChart: document.querySelector("#allocationChart"),
   accountBars: document.querySelector("#accountBars"),
+  holdingCardsPanel: document.querySelector("#holdingCardsPanel"),
+  holdingCards: document.querySelector("#holdingCards"),
   detailTitle: document.querySelector("#detailTitle"),
   tableHead: document.querySelector("#tableHead"),
   assetRows: document.querySelector("#assetRows"),
@@ -238,6 +242,9 @@ elements.tabButtons.forEach((button) => {
 
 elements.tableSearch.addEventListener("input", () => {
   renderTable(currentRows, elements.tableSearch.value);
+  if (currentView === "holdings") {
+    renderHoldingCards(currentRows, elements.tableSearch.value);
+  }
 });
 
 elements.tableHead.addEventListener("click", (event) => {
@@ -792,6 +799,8 @@ function resetDailyProfitState() {
     status: "loading",
     taiwan: null,
     us: null,
+    taiwanQuotes: new Map(),
+    usQuotes: new Map(),
   };
   dailyProfitRequestId += 1;
 }
@@ -812,8 +821,10 @@ async function loadDailyHoldingProfit(rows) {
 
   dailyProfitState = {
     status: "ready",
-    taiwan: taiwanResult.status === "fulfilled" ? taiwanResult.value : null,
-    us: usResult.status === "fulfilled" ? usResult.value : null,
+    taiwan: taiwanResult.status === "fulfilled" ? taiwanResult.value.total : null,
+    us: usResult.status === "fulfilled" ? usResult.value.total : null,
+    taiwanQuotes: taiwanResult.status === "fulfilled" ? taiwanResult.value.quotes : new Map(),
+    usQuotes: usResult.status === "fulfilled" ? usResult.value.quotes : new Map(),
   };
 
   if (currentView === "holdings") {
@@ -824,7 +835,7 @@ async function loadDailyHoldingProfit(rows) {
 async function fetchTaiwanDailyProfit(rows) {
   const holdings = rows.filter((row) => row.assetClass === "台股" && row.ticker && row.quantity > 0);
   if (!holdings.length) {
-    return 0;
+    return { total: 0, quotes: new Map() };
   }
 
   const codes = [...new Set(holdings.map((row) => row.ticker))];
@@ -841,18 +852,25 @@ async function fetchTaiwanDailyProfit(rows) {
       const currentPrice = toNumber(quote.z) || toNumber(quote.pz) || toNumber(quote.o);
       const previousClose = toNumber(quote.y);
       if (code && currentPrice > 0 && previousClose > 0) {
-        quotes.set(code, currentPrice - previousClose);
+        const change = currentPrice - previousClose;
+        quotes.set(code, {
+          change,
+          percent: (change / previousClose) * 100,
+        });
       }
     });
   }
 
-  return holdings.reduce((total, row) => total + (quotes.get(row.ticker) || 0) * row.quantity, 0);
+  return {
+    total: holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity, 0),
+    quotes,
+  };
 }
 
 async function fetchUsDailyProfit(rows) {
   const holdings = rows.filter((row) => row.assetClass === "美股" && row.ticker && row.quantity > 0);
   if (!holdings.length) {
-    return 0;
+    return { total: 0, quotes: new Map() };
   }
 
   const quotePairs = await Promise.all(
@@ -864,12 +882,22 @@ async function fetchUsDailyProfit(rows) {
       const record = rowsToObjects(rows)[0] || {};
       const close = toNumber(readColumn(record, ["Close"]));
       const previousClose = toNumber(readColumn(record, ["Prev"]));
-      return [symbol, close > 0 && previousClose > 0 ? close - previousClose : 0];
+      const change = close > 0 && previousClose > 0 ? close - previousClose : 0;
+      return [
+        symbol,
+        {
+          change,
+          percent: previousClose > 0 ? (change / previousClose) * 100 : 0,
+        },
+      ];
     }),
   );
   const quotes = new Map(quotePairs);
 
-  return holdings.reduce((total, row) => total + (quotes.get(row.ticker) || 0) * row.quantity * row.exchangeRate, 0);
+  return {
+    total: holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity * row.exchangeRate, 0),
+    quotes,
+  };
 }
 
 function extractCsvText(text) {
@@ -1068,6 +1096,7 @@ function renderDashboard(rows) {
   document.body.dataset.view = currentView;
   const config = viewConfigs[currentView];
   if (currentView === "overview") {
+    hideHoldingCards();
     renderOverviewDashboard(rows, config);
     return;
   }
@@ -1101,9 +1130,11 @@ function renderDashboard(rows) {
 
   renderDonut(byClass, chartTotal);
   if (isRealizedView) {
+    hideHoldingCards();
     renderProfitLossRanking(rows);
   } else {
     renderBars(distributionGroup, chartTotal);
+    renderHoldingCards(rows, elements.tableSearch.value);
   }
   renderTableHead();
   renderTable(rows, elements.tableSearch.value);
@@ -1131,6 +1162,7 @@ function renderOverviewDashboard(rows, config) {
   elements.allocationTotal.textContent = latest ? latest.dateLabel : "--";
   elements.updatedAt.textContent = rows.length ? new Date().toLocaleString("zh-TW") : "--";
   hideExtraMetrics();
+  hideHoldingCards();
 
   renderDonut(new Map(composition.map((item) => [item.name, item.value])), compositionTotal);
   renderLineChart(rows);
@@ -1485,12 +1517,7 @@ function getAssetComposition(row) {
 }
 
 function renderTable(rows, query = "") {
-  const keyword = query.trim().toLowerCase();
-  const filteredRows = keyword
-    ? rows.filter((row) =>
-        viewConfigs[currentView].tableColumns.some((column) => String(row[column.key] || "").toLowerCase().includes(keyword)),
-      )
-    : rows;
+  const filteredRows = filterRowsByQuery(rows, query);
   const sortedRows = sortRows(filteredRows);
 
   if (!sortedRows.length) {
@@ -1519,6 +1546,108 @@ function renderTable(rows, query = "") {
   applyPrivacyMasks();
 }
 
+function filterRowsByQuery(rows, query = "") {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) {
+    return rows;
+  }
+  return rows.filter((row) =>
+    viewConfigs[currentView].tableColumns.some((column) => String(row[column.key] || "").toLowerCase().includes(keyword)),
+  );
+}
+
+function renderHoldingCards(rows, query = "") {
+  if (currentView !== "holdings") {
+    hideHoldingCards();
+    return;
+  }
+
+  elements.holdingCardsPanel.classList.remove("is-hidden");
+  const sortedRows = sortRows(filterRowsByQuery(rows, query)).sort((a, b) => b.baseValue - a.baseValue);
+  if (!sortedRows.length) {
+    elements.holdingCards.innerHTML = '<p class="empty">目前沒有可顯示的持股卡片。</p>';
+    return;
+  }
+
+  elements.holdingCards.innerHTML = sortedRows
+    .map((row) => {
+      const identity = getHoldingIdentity(row);
+      const quote = getHoldingQuote(row);
+      const dailyAmount = quote ? quote.change * row.quantity * row.exchangeRate : null;
+      const trendClass = dailyAmount > 0 ? "is-up" : dailyAmount < 0 ? "is-down" : "is-flat";
+      const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
+      const dailyPercentLabel = quote ? formatPercent(quote.percent) : dailyAmountLabel;
+      return `
+        <article class="holding-card ${trendClass}">
+          <div class="holding-card-head">
+            <div>
+              <strong>${escapeHtml(identity.name)}</strong>
+              <span>${escapeHtml(identity.ticker)}</span>
+            </div>
+            <span class="market-badge">${escapeHtml(row.assetClass)}</span>
+          </div>
+          <div class="holding-card-main">
+            <span>目前總值</span>
+            <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
+          </div>
+          <div class="holding-card-metrics">
+            <div>
+              <span>股數</span>
+              <strong class="holding-card-quantity">${formatNumber(row.quantity)}</strong>
+            </div>
+            <div>
+              <span>今日漲跌</span>
+              <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
+            </div>
+            <div>
+              <span>漲跌幅</span>
+              <strong class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</strong>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  applyPrivacyMasks();
+}
+
+function hideHoldingCards() {
+  elements.holdingCardsPanel.classList.add("is-hidden");
+  elements.holdingCards.innerHTML = "";
+}
+
+function getHoldingQuote(row) {
+  if (dailyProfitState.status !== "ready") {
+    return null;
+  }
+  const quoteMap = row.assetClass === "美股" ? dailyProfitState.usQuotes : dailyProfitState.taiwanQuotes;
+  return quoteMap.get(row.ticker) || null;
+}
+
+function formatHoldingDailyValue(value) {
+  if (dailyProfitState.status === "loading") {
+    return "查詢中";
+  }
+  if (value === null || !Number.isFinite(value)) {
+    return "--";
+  }
+  return formatSignedMoney(value);
+}
+
+function getHoldingIdentity(row) {
+  const ticker = String(row.ticker || row.assetName || "").trim();
+  const rawName = String(row.assetName || ticker).trim();
+  const name = ticker ? rawName.replace(new RegExp(`^${escapeRegExp(ticker)}\\s*`), "").trim() : rawName;
+  return {
+    ticker: ticker || rawName,
+    name: name || rawName || ticker,
+  };
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function updatePrivacyMode() {
   document.body.classList.toggle("is-private", privacyMode);
   elements.privacyToggle.setAttribute("aria-pressed", String(privacyMode));
@@ -1542,6 +1671,10 @@ function applyPrivacyMasks() {
         ".line-legend span",
         ".latest-label text",
         ".axis-value",
+        ".holding-card-value",
+        ".holding-card-quantity",
+        ".holding-card-delta",
+        ".holding-card-percent",
         "td.numeric",
       ].join(", "),
     )
