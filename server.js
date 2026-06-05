@@ -1,10 +1,10 @@
 const http = require("node:http");
-const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const port = Number(process.env.PORT || 5173);
 const root = __dirname;
+const externalFetchTimeout = 4500;
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -86,7 +86,7 @@ async function handleProxyRequest(requestUrl, res) {
     return;
   }
 
-  const allowedHosts = new Set(["mis.twse.com.tw", "stooq.com"]);
+  const allowedHosts = new Set(["mis.twse.com.tw", "stooq.com", "query1.finance.yahoo.com"]);
   if (!allowedHosts.has(targetUrl.hostname)) {
     sendText(res, 403, "此代理僅允許行情資料來源");
     return;
@@ -127,37 +127,33 @@ function extractSheetId(sheetUrl) {
   return match ? match[1] : "";
 }
 
-function fetchText(url, redirectCount = 0) {
-  return new Promise((resolve, reject) => {
-    const client = new URL(url).protocol === "http:" ? http : https;
-    client
-      .get(url, (response) => {
-        const location = response.headers.location;
-        if (response.statusCode >= 300 && response.statusCode < 400 && location) {
-          if (redirectCount >= 5) {
-            reject(new Error("Google Sheet 重新導向次數過多"));
-            return;
-          }
-          resolve(fetchText(new URL(location, url).toString(), redirectCount + 1));
-          return;
-        }
-
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          const error = new Error(`Google Sheet 回應錯誤：${response.statusCode}`);
-          error.statusCode = response.statusCode;
-          reject(error);
-          return;
-        }
-
-        let body = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => resolve(body));
-      })
-      .on("error", reject);
-  });
+async function fetchText(url) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), externalFetchTimeout);
+  const targetUrl = new URL(url);
+  const headers =
+    targetUrl.hostname === "query1.finance.yahoo.com"
+      ? {}
+      : {
+          "user-agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+          accept: "text/csv,application/json,text/plain,*/*",
+        };
+  try {
+    const response = await fetch(url, {
+      headers,
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const error = new Error(`外部資料來源回應錯誤：${response.status}`);
+      error.statusCode = response.status;
+      throw error;
+    }
+    return response.text();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function looksLikeHtml(content) {

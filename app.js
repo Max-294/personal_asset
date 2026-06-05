@@ -7,6 +7,7 @@ const sampleRows = [
 ];
 
 const palette = ["#123c34", "#b89455", "#4f7466", "#8a5f37", "#6b7f93", "#9f6c64", "#2f5f52"];
+const MARKET_FETCH_TIMEOUT = 3500;
 const numericSortKeys = new Set([
   "quantity",
   "price",
@@ -432,7 +433,7 @@ function buildSheetApiUrl(sheetUrl, sheetName, gid) {
   return `/api/sheet?${params.toString()}`;
 }
 
-async function fetchMarketText(url) {
+async function fetchMarketText(url, timeout = MARKET_FETCH_TIMEOUT) {
   const candidates = [];
   if (!isStaticHosted() && location.protocol !== "file:") {
     candidates.push(`/api/proxy?url=${encodeURIComponent(url)}`);
@@ -449,7 +450,7 @@ async function fetchMarketText(url) {
   let lastError;
   for (const candidate of candidates) {
     try {
-      const response = await fetchWithTimeout(candidate, 6000);
+      const response = await fetchWithTimeout(candidate, timeout);
       if (!response.ok) {
         throw new Error(`行情來源回應錯誤：${response.status}`);
       }
@@ -465,7 +466,7 @@ async function fetchMarketText(url) {
   throw lastError || new Error("行情來源讀取失敗");
 }
 
-function fetchWithTimeout(url, timeout = 6000) {
+function fetchWithTimeout(url, timeout = MARKET_FETCH_TIMEOUT) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeout);
   return fetch(url, {
@@ -841,30 +842,46 @@ async function fetchTaiwanDailyProfit(rows) {
   const codes = [...new Set(holdings.map((row) => row.ticker))];
   const quotes = new Map();
   const chunkSize = 20;
+  const chunkRequests = [];
   for (let index = 0; index < codes.length; index += chunkSize) {
-    const chunk = codes.slice(index, index + chunkSize);
-    const exCh = chunk.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]).join("|");
-    const url = `http://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`;
-    const text = await fetchMarketText(url);
-    const data = JSON.parse(text.trim());
-    (data.msgArray || []).forEach((quote) => {
-      const code = String(quote.c || "").trim();
-      const currentPrice = toNumber(quote.z) || toNumber(quote.pz) || toNumber(quote.o);
-      const previousClose = toNumber(quote.y);
-      if (code && currentPrice > 0 && previousClose > 0) {
-        const change = currentPrice - previousClose;
-        quotes.set(code, {
-          change,
-          percent: (change / previousClose) * 100,
-        });
-      }
-    });
+    chunkRequests.push(fetchTaiwanQuoteChunk(codes.slice(index, index + chunkSize)));
   }
+  const results = await Promise.allSettled(chunkRequests);
+  results.forEach((result) => {
+    if (result.status === "fulfilled") {
+      result.value.forEach((quote, code) => {
+        quotes.set(code, quote);
+      });
+    } else {
+      console.warn(result.reason);
+    }
+  });
 
   return {
-    total: holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity, 0),
+    total: quotes.size ? holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity, 0) : null,
     quotes,
   };
+}
+
+async function fetchTaiwanQuoteChunk(codes) {
+  const exCh = codes.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]).join("|");
+  const url = `http://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`;
+  const text = await fetchMarketText(url);
+  const data = JSON.parse(text.trim());
+  const quotes = new Map();
+  (data.msgArray || []).forEach((quote) => {
+    const code = String(quote.c || "").trim();
+    const currentPrice = toNumber(quote.z) || toNumber(quote.pz) || toNumber(quote.o);
+    const previousClose = toNumber(quote.y);
+    if (code && currentPrice > 0 && previousClose > 0) {
+      const change = currentPrice - previousClose;
+      quotes.set(code, {
+        change,
+        percent: (change / previousClose) * 100,
+      });
+    }
+  });
+  return quotes;
 }
 
 async function fetchUsDailyProfit(rows) {
@@ -873,31 +890,46 @@ async function fetchUsDailyProfit(rows) {
     return { total: 0, quotes: new Map() };
   }
 
-  const quotePairs = await Promise.all(
-    [...new Set(holdings.map((row) => row.ticker))].map(async (symbol) => {
-      const stooqSymbol = `${symbol.toLowerCase()}.us`;
-      const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcvp&h&e=csv`;
-      const csv = await fetchMarketText(url);
-      const rows = parseCsvRows(extractCsvText(csv));
-      const record = rowsToObjects(rows)[0] || {};
-      const close = toNumber(readColumn(record, ["Close"]));
-      const previousClose = toNumber(readColumn(record, ["Prev"]));
-      const change = close > 0 && previousClose > 0 ? close - previousClose : 0;
+  const symbols = [...new Set(holdings.map((row) => row.ticker))];
+  const quotes = await fetchUsQuoteBatch(symbols);
+
+  return {
+    total: quotes.size ? holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity * row.exchangeRate, 0) : null,
+    quotes,
+  };
+}
+
+async function fetchUsQuoteBatch(symbols) {
+  const quotes = new Map();
+  const results = await Promise.allSettled(
+    symbols.map(async (symbol) => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+      const text = await fetchMarketText(url);
+      const data = JSON.parse(text);
+      const meta = data.chart?.result?.[0]?.meta || {};
+      const currentPrice = toNumber(meta.regularMarketPrice);
+      const previousClose = toNumber(meta.chartPreviousClose) || toNumber(meta.previousClose);
+      if (currentPrice <= 0 || previousClose <= 0) {
+        return null;
+      }
+      const change = currentPrice - previousClose;
       return [
         symbol,
         {
           change,
-          percent: previousClose > 0 ? (change / previousClose) * 100 : 0,
+          percent: (change / previousClose) * 100,
         },
       ];
     }),
   );
-  const quotes = new Map(quotePairs);
-
-  return {
-    total: holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity * row.exchangeRate, 0),
-    quotes,
-  };
+  results.forEach((result) => {
+    if (result.status === "fulfilled" && result.value) {
+      quotes.set(result.value[0], result.value[1]);
+    } else if (result.status === "rejected") {
+      console.warn(result.reason);
+    }
+  });
+  return quotes;
 }
 
 function extractCsvText(text) {
@@ -1629,7 +1661,7 @@ function formatHoldingDailyValue(value) {
     return "查詢中";
   }
   if (value === null || !Number.isFinite(value)) {
-    return "--";
+    return "暫無行情";
   }
   return formatSignedMoney(value);
 }
