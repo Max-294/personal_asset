@@ -7,7 +7,8 @@ const sampleRows = [
 ];
 
 const palette = ["#123c34", "#b89455", "#4f7466", "#8a5f37", "#6b7f93", "#9f6c64", "#2f5f52"];
-const MARKET_FETCH_TIMEOUT = 3500;
+const LOCAL_MARKET_FETCH_TIMEOUT = 3500;
+const STATIC_MARKET_FETCH_TIMEOUT = 9000;
 const numericSortKeys = new Set([
   "quantity",
   "price",
@@ -433,19 +434,8 @@ function buildSheetApiUrl(sheetUrl, sheetName, gid) {
   return `/api/sheet?${params.toString()}`;
 }
 
-async function fetchMarketText(url, timeout = MARKET_FETCH_TIMEOUT) {
-  const candidates = [];
-  if (!isStaticHosted() && location.protocol !== "file:") {
-    candidates.push(`/api/proxy?url=${encodeURIComponent(url)}`);
-  }
-  if (!(location.protocol === "https:" && url.startsWith("http:"))) {
-    candidates.push(url);
-  }
-  candidates.push(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
-  if (url.startsWith("https:")) {
-    candidates.push(`https://r.jina.ai/http://r.jina.ai/http://${url}`);
-  }
-  candidates.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+async function fetchMarketText(url, timeout = getMarketFetchTimeout()) {
+  const candidates = buildMarketFetchCandidates(url);
 
   let lastError;
   for (const candidate of candidates) {
@@ -466,7 +456,42 @@ async function fetchMarketText(url, timeout = MARKET_FETCH_TIMEOUT) {
   throw lastError || new Error("行情來源讀取失敗");
 }
 
-function fetchWithTimeout(url, timeout = MARKET_FETCH_TIMEOUT) {
+function buildMarketFetchCandidates(url) {
+  if (!isStaticHosted() && location.protocol !== "file:") {
+    return [`/api/proxy?url=${encodeURIComponent(url)}`, url];
+  }
+
+  if (isTaiwanMarketUrl(url)) {
+    return [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    ];
+  }
+
+  if (isYahooFinanceUrl(url)) {
+    return [url];
+  }
+
+  return [
+    url,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  ];
+}
+
+function getMarketFetchTimeout() {
+  return isStaticHosted() ? STATIC_MARKET_FETCH_TIMEOUT : LOCAL_MARKET_FETCH_TIMEOUT;
+}
+
+function isTaiwanMarketUrl(url) {
+  return url.includes("mis.twse.com.tw");
+}
+
+function isYahooFinanceUrl(url) {
+  return url.includes("query1.finance.yahoo.com") || url.includes("query2.finance.yahoo.com");
+}
+
+function fetchWithTimeout(url, timeout = getMarketFetchTimeout()) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeout);
   return fetch(url, {
@@ -478,7 +503,7 @@ function fetchWithTimeout(url, timeout = MARKET_FETCH_TIMEOUT) {
 }
 
 function looksLikeProxyFailure(text) {
-  return /Exceeded the daily hits limit|not a valid resource|Server-side requests are not allowed|Attention Required|Cloudflare/i.test(
+  return /Exceeded the daily hits limit|not a valid resource|Server-side requests are not allowed|Attention Required|Cloudflare|error code:\s*5\d{2}/i.test(
     text.slice(0, 500),
   );
 }
@@ -865,7 +890,7 @@ async function fetchTaiwanDailyProfit(rows) {
 
 async function fetchTaiwanQuoteChunk(codes) {
   const exCh = codes.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]).join("|");
-  const url = `http://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`;
+  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exCh)}&json=1&delay=0&_=${Date.now()}`;
   const text = await fetchMarketText(url);
   const data = JSON.parse(text.trim());
   const quotes = new Map();
