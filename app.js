@@ -660,7 +660,12 @@ function normalizeTaiwanStockRow(row) {
   const stockName = readColumn(row, ["股票名稱", "名稱", "證券名稱", "股名", "資產名稱", "標的", "assetName", "Asset", "Name"]);
   const quantity = toNumber(readColumn(row, ["尚存股數", "持有股數", "庫存股數", "庫存", "數量", "股數", "單位數", "quantity", "Quantity"]));
   const price = toNumber(readColumn(row, ["現價", "目前股價", "收盤價", "單價", "價格", "淨值", "price", "Price"]));
+  const previousClose = toNumber(readColumn(row, ["昨收", "昨日收盤", "昨日收盤價", "昨收價", "前收", "previousClose", "Previous Close"]));
   const explicitValue = toNumber(readColumn(row, ["現值", "市值", "目前市值", "庫存市值", "持有市值", "金額", "value", "Value", "Market Value"]));
+  const sheetDailyChange = toMarketNumber(readColumn(row, ["今日漲跌", "漲跌", "漲跌金額", "今日漲跌金額", "單日漲跌", "change", "Change"]));
+  const sheetDailyPercent = toMarketPercent(readColumn(row, ["今日漲跌幅", "漲跌幅", "單日漲跌幅", "changePercent", "Change Percent"]));
+  const dailyChange = deriveDailyChangeFromSheet(sheetDailyChange, sheetDailyPercent, price, previousClose);
+  const dailyPercent = deriveDailyPercentFromSheet(sheetDailyChange, sheetDailyPercent, price, previousClose);
   const value = explicitValue || quantity * price;
   const assetName = [stockCode, stockName].filter(Boolean).join(" ") || stockName;
   const isTaiwanStock = Boolean(stockCode || stockName);
@@ -676,6 +681,8 @@ function normalizeTaiwanStockRow(row) {
     baseValue: value,
     exchangeRate: 1,
     currency: readColumn(row, ["幣別", "currency", "Currency"]) || "TWD",
+    sheetDailyChange: dailyChange,
+    sheetDailyPercent: dailyPercent,
   };
 }
 
@@ -864,12 +871,14 @@ async function fetchTaiwanDailyProfit(rows) {
     return { total: 0, quotes: new Map() };
   }
 
+  const sheetQuotes = getSheetTaiwanQuotes(holdings);
   const codes = [...new Set(holdings.map((row) => row.ticker))];
-  const quotes = new Map();
+  const missingCodes = codes.filter((code) => !sheetQuotes.has(code));
+  const quotes = new Map(sheetQuotes);
   const chunkSize = 20;
   const chunkRequests = [];
-  for (let index = 0; index < codes.length; index += chunkSize) {
-    chunkRequests.push(fetchTaiwanQuoteChunk(codes.slice(index, index + chunkSize)));
+  for (let index = 0; index < missingCodes.length; index += chunkSize) {
+    chunkRequests.push(fetchTaiwanQuoteChunk(missingCodes.slice(index, index + chunkSize)));
   }
   const results = await Promise.allSettled(chunkRequests);
   results.forEach((result) => {
@@ -886,6 +895,20 @@ async function fetchTaiwanDailyProfit(rows) {
     total: quotes.size ? holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity, 0) : null,
     quotes,
   };
+}
+
+function getSheetTaiwanQuotes(rows) {
+  return rows.reduce((quotes, row) => {
+    if (!row.ticker || !Number.isFinite(row.sheetDailyChange) || !Number.isFinite(row.sheetDailyPercent)) {
+      return quotes;
+    }
+    quotes.set(row.ticker, {
+      change: row.sheetDailyChange,
+      percent: row.sheetDailyPercent,
+      source: "sheet",
+    });
+    return quotes;
+  }, new Map());
 }
 
 async function fetchTaiwanQuoteChunk(codes) {
@@ -1146,6 +1169,52 @@ function toPercent(value) {
   const cleaned = String(value || "").replace(/[%％,\s]/g, "");
   const number = Number(cleaned);
   return Number.isFinite(number) ? number : 0;
+}
+
+function toMarketNumber(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+  const sign = /▼|下跌|跌/.test(text) && !/[+-]\s*\d/.test(text) ? -1 : 1;
+  const match = text.replace(/,/g, "").match(/[+-]?\d+(?:\.\d+)?/);
+  if (!match) {
+    return null;
+  }
+  const number = Number(match[0]);
+  return Number.isFinite(number) ? number * sign : null;
+}
+
+function toMarketPercent(value) {
+  const number = toMarketNumber(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function deriveDailyChangeFromSheet(change, percent, price, previousClose = 0) {
+  if (Number.isFinite(change)) {
+    return change;
+  }
+  if (price > 0 && previousClose > 0) {
+    return price - previousClose;
+  }
+  if (!Number.isFinite(percent) || !price || percent <= -100) {
+    return null;
+  }
+  return price * (percent / (100 + percent));
+}
+
+function deriveDailyPercentFromSheet(change, percent, price, previousClose = 0) {
+  if (Number.isFinite(percent)) {
+    return percent;
+  }
+  if (price > 0 && previousClose > 0) {
+    return ((price - previousClose) / previousClose) * 100;
+  }
+  if (!Number.isFinite(change) || !price || price === change) {
+    return null;
+  }
+  const inferredPreviousClose = price - change;
+  return inferredPreviousClose > 0 ? (change / inferredPreviousClose) * 100 : null;
 }
 
 function renderDashboard(rows) {

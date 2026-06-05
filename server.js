@@ -4,7 +4,8 @@ const path = require("node:path");
 
 const port = Number(process.env.PORT || 5173);
 const root = __dirname;
-const externalFetchTimeout = 4500;
+const marketFetchTimeout = 4500;
+const sheetFetchTimeout = 15000;
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -54,7 +55,7 @@ async function handleSheetRequest(requestUrl, res) {
   let csv = "";
 
   try {
-    csv = await fetchText(csvUrl);
+    csv = await fetchText(csvUrl, sheetFetchTimeout);
   } catch (error) {
     if (error.statusCode === 401 || error.statusCode === 403) {
       sendText(res, 403, "Google Sheet 尚未開放連結檢視，請將分享權限改為「知道連結的任何人可檢視」");
@@ -92,7 +93,7 @@ async function handleProxyRequest(requestUrl, res) {
     return;
   }
 
-  const body = await fetchText(targetUrl.toString());
+  const body = await fetchText(targetUrl.toString(), marketFetchTimeout);
   res.writeHead(200, {
     "content-type": targetUrl.hostname === "stooq.com" ? "text/csv; charset=utf-8" : "application/json; charset=utf-8",
     "cache-control": "no-store",
@@ -127,9 +128,9 @@ function extractSheetId(sheetUrl) {
   return match ? match[1] : "";
 }
 
-async function fetchText(url) {
+async function fetchText(url, timeout = marketFetchTimeout) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), externalFetchTimeout);
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
   const targetUrl = new URL(url);
   const headers =
     targetUrl.hostname === "query1.finance.yahoo.com"
