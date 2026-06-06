@@ -663,8 +663,8 @@ function normalizeTaiwanStockRow(row) {
   const previousClose = toNumber(readColumn(row, ["昨收", "昨日收盤", "昨日收盤價", "昨收價", "前收", "previousClose", "Previous Close"]));
   const explicitValue = toNumber(readColumn(row, ["現值", "市值", "目前市值", "庫存市值", "持有市值", "金額", "value", "Value", "Market Value"]));
   const cost = toNumber(readColumn(row, ["買進成本", "購入成本", "成本", "庫存成本", "投入成本", "原始成本", "cost", "Cost"]));
-  const explicitCumulativeProfit = toNumber(readColumn(row, ["累積損益", "總損益", "未實現損益", "損益", "總獲利", "淨利", "profit", "Profit"]));
-  const dividend = toNumber(readColumn(row, ["累計股息", "股息", "配息", "股利", "dividend", "Dividend"]));
+  const explicitCumulativeProfit = toNumber(readColumn(row, ["累積損益", "累計損益", "含息損益", "總損益", "未實現損益", "損益", "總獲利", "淨利", "profit", "Profit"]));
+  const dividend = toNumber(readColumn(row, ["累計股息", "累積股息", "股息", "配息", "股利", "dividend", "Dividend"]));
   const explicitReturnRate = toPercent(readColumn(row, ["報酬率", "獲利（％）", "獲利(％)", "returnRate", "Return Rate"]));
   const sheetDailyChange = toMarketNumber(readColumn(row, ["今日漲跌", "漲跌", "漲跌金額", "今日漲跌金額", "單日漲跌", "change", "Change"]));
   const sheetDailyPercent = toMarketPercent(readColumn(row, ["今日漲跌幅", "漲跌幅", "單日漲跌幅", "changePercent", "Change Percent"]));
@@ -1833,8 +1833,8 @@ function renderTaiwanHoldingCard(row, rows) {
   const identity = getHoldingIdentity(row);
   const quote = getHoldingQuote(row);
   const dailyAmount = quote ? quote.change * row.quantity : null;
-  const dividend = getTaiwanHoldingDividend(row, identity);
-  const cumulativeProfit = Number.isFinite(row.cumulativeProfit) ? row.cumulativeProfit + dividend : null;
+  const dividend = Number.isFinite(row.dividend) ? row.dividend : null;
+  const cumulativeProfit = Number.isFinite(row.cumulativeProfit) ? row.cumulativeProfit : null;
   const returnRate = row.cost > 0 && Number.isFinite(cumulativeProfit) ? (cumulativeProfit / row.cost) * 100 : row.returnRate;
   const totalValue = sum(rows, "baseValue");
   const weight = totalValue > 0 ? (row.baseValue / totalValue) * 100 : 0;
@@ -1878,7 +1878,7 @@ function renderTaiwanHoldingCard(row, rows) {
         <div class="tw-card-metric is-dividend">
           <span>累計股息</span>
           <strong class="holding-card-dividend">${formatNullableMoney(dividend)}</strong>
-          <em>股利紀錄彙總</em>
+          <em>表格欄位</em>
         </div>
         <div class="tw-card-metric">
           <span>昨日收盤</span>
@@ -1908,30 +1908,6 @@ function getHoldingQuote(row) {
   }
   const quoteMap = row.assetClass === "美股" ? dailyProfitState.usQuotes : dailyProfitState.taiwanQuotes;
   return quoteMap.get(row.ticker) || null;
-}
-
-function getTaiwanHoldingDividend(row, identity) {
-  if (row.dividend > 0) {
-    return row.dividend;
-  }
-  const ticker = normalizeMatchText(identity.ticker);
-  const name = normalizeMatchText(identity.name);
-  return viewData.dividendIncome.reduce((total, item) => {
-    const assetName = normalizeMatchText(item.assetName);
-    const matchesTicker = ticker.length >= 4 && assetName.includes(ticker);
-    const matchesName = name.length >= 2 && assetName.includes(name);
-    if (!assetName || (!matchesTicker && !matchesName)) {
-      return total;
-    }
-    return total + item.value;
-  }, 0);
-}
-
-function normalizeMatchText(value) {
-  return String(value || "")
-    .replace(/\s+/g, "")
-    .replace(/[（）()]/g, "")
-    .toLowerCase();
 }
 
 function formatHoldingDailyValue(value) {
