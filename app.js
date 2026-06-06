@@ -131,8 +131,8 @@ const viewConfigs = {
   holdings: {
     statusName: "目前持股",
     primaryLabel: "總資產（台幣）",
-    secondLabel: "資產類別",
-    thirdLabel: "帳戶數",
+    secondLabel: "台股漲跌檔數",
+    thirdLabel: "美股漲跌檔數",
     fourthLabel: "最大配置",
     allocationTitle: "資產配置",
     barTitle: "市場分布",
@@ -1331,10 +1331,14 @@ function renderDashboard(rows) {
   elements.detailTitle.textContent = config.detailTitle;
 
   elements.totalValue.textContent = rows.length ? config.totalLabel(total) : "--";
-  elements.assetClassCount.textContent = rows.length ? String(isRealizedView ? rows.length : byClass.size) : "--";
-  elements.accountCount.textContent = rows.length
-    ? String(isRealizedView ? rows.filter((row) => row.baseValue > 0).length : byAccount.size)
-    : "--";
+  if (currentView === "holdings") {
+    renderHoldingMoveCounts(rows);
+  } else {
+    elements.assetClassCount.textContent = rows.length ? String(isRealizedView ? rows.length : byClass.size) : "--";
+    elements.accountCount.textContent = rows.length
+      ? String(isRealizedView ? rows.filter((row) => row.baseValue > 0).length : byAccount.size)
+      : "--";
+  }
   elements.largestClass.textContent = largestRow ? largestRow.assetName : "--";
   elements.allocationTotal.textContent = rows.length ? config.totalLabel(total) : "--";
   elements.updatedAt.textContent = rows.length ? new Date().toLocaleString("zh-TW") : "--";
@@ -1396,6 +1400,58 @@ function renderExtraMetrics(rows) {
   elements.sixthMetricLabel.textContent = "今日美股損益";
   elements.taiwanTodayProfit.textContent = formatDailyProfitValue(dailyProfitState.taiwan, rows);
   elements.usTodayProfit.textContent = formatDailyProfitValue(dailyProfitState.us, rows);
+}
+
+function renderHoldingMoveCounts(rows) {
+  elements.assetClassCount.innerHTML = formatMoveCountValue(rows, "台股");
+  elements.accountCount.innerHTML = formatMoveCountValue(rows, "美股");
+}
+
+function formatMoveCountValue(rows, assetClass) {
+  if (!rows.length || dailyProfitState.status === "idle") {
+    return "--";
+  }
+  if (dailyProfitState.status === "loading") {
+    return "查詢中";
+  }
+  if (dailyProfitState.status === "error") {
+    return "--";
+  }
+
+  const counts = getHoldingMoveCounts(rows, assetClass);
+  if (counts.total === 0) {
+    return "--";
+  }
+  return `
+    <span class="move-count-list">
+      <span><i class="move-icon is-up"></i>上漲 ${counts.up} 家</span>
+      <span><i class="move-icon is-down"></i>下跌 ${counts.down} 家</span>
+      <span><i class="move-icon is-flat"></i>持平 ${counts.flat} 家</span>
+    </span>
+  `;
+}
+
+function getHoldingMoveCounts(rows, assetClass) {
+  return rows
+    .filter((row) => row.assetClass === assetClass && row.ticker && row.quantity > 0)
+    .reduce(
+      (counts, row) => {
+        const quote = getHoldingQuote(row);
+        if (!quote || !Number.isFinite(quote.change)) {
+          return counts;
+        }
+        if (quote.change > 0) {
+          counts.up += 1;
+        } else if (quote.change < 0) {
+          counts.down += 1;
+        } else {
+          counts.flat += 1;
+        }
+        counts.total += 1;
+        return counts;
+      },
+      { up: 0, down: 0, flat: 0, total: 0 },
+    );
 }
 
 function hideExtraMetrics() {

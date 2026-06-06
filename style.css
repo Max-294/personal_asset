@@ -325,6 +325,71 @@ body[data-view="holdings"] .summary-grid {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+body[data-view="holdings"] #assetClassCount,
+body[data-view="holdings"] #accountCount {
+  font-size: 0.92rem;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.move-count-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.move-count-list span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.22;
+  white-space: nowrap;
+}
+
+.move-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+}
+
+.move-icon::before {
+  color: #fffdf8;
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.move-icon.is-up {
+  background: #4f7752;
+}
+
+.move-icon.is-up::before {
+  content: "▲";
+}
+
+.move-icon.is-down {
+  background: #a85f57;
+}
+
+.move-icon.is-down::before {
+  content: "▼";
+}
+
+.move-icon.is-flat {
+  background: #9a8767;
+}
+
+.move-icon.is-flat::before {
+  content: "－";
+}
+
 .dashboard-grid {
   grid-template-columns: minmax(300px, 0.86fr) minmax(360px, 1.14fr);
 }
