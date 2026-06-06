@@ -676,6 +676,10 @@ body[data-view="holdings"] .summary-grid {
   gap: 14px;
 }
 
+.holding-card-tw {
+  gap: 14px;
+}
+
 .holding-card {
   position: relative;
   display: grid;
@@ -788,6 +792,132 @@ body[data-view="holdings"] .summary-grid {
 .holding-card.is-down .holding-card-delta,
 .holding-card.is-down .holding-card-percent {
   color: #a85f57;
+}
+
+.tw-card-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(118px, auto);
+  gap: 14px;
+  align-items: end;
+}
+
+.tw-card-main span,
+.tw-card-metric span,
+.tw-card-weight span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.tw-card-price {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 10px;
+  justify-content: end;
+  text-align: right;
+}
+
+.tw-card-price strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.tw-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.tw-card-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  min-width: 0;
+  border: 1px solid rgba(18, 60, 52, 0.09);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(255, 253, 248, 0.78);
+}
+
+.tw-card-metric span,
+.tw-card-metric em {
+  min-width: 0;
+}
+
+.tw-card-metric strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 850;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.tw-card-metric em {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.tw-card-metric.is-up strong,
+.tw-card-metric.is-up em,
+.holding-card.is-up .tw-card-metric:first-child strong,
+.holding-card.is-up .tw-card-metric:first-child em {
+  color: #4f7752;
+}
+
+.tw-card-metric.is-down strong,
+.tw-card-metric.is-down em,
+.holding-card.is-down .tw-card-metric:first-child strong,
+.holding-card.is-down .tw-card-metric:first-child em {
+  color: #a85f57;
+}
+
+.tw-card-metric.is-dividend strong {
+  color: var(--accent-dark);
+}
+
+.tw-card-weight {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(18, 60, 52, 0.08);
+  padding-top: 11px;
+}
+
+.tw-card-weight div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tw-card-weight strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.tw-card-weight-track {
+  display: block;
+  overflow: hidden;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(18, 60, 52, 0.09);
+}
+
+.tw-card-weight-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #4f7466);
 }
 
 .table-header {
@@ -923,6 +1053,12 @@ td {
   justify-content: flex-start;
 }
 
+.is-private .tw-card-price .privacy-mask::after,
+.is-private .tw-card-metric .privacy-mask::after,
+.is-private .tw-card-weight .privacy-mask::after {
+  justify-content: flex-end;
+}
+
 @media (max-width: 920px) {
   .app-header,
   .dashboard-grid,
@@ -961,6 +1097,16 @@ td {
 
   .holding-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tw-card-main,
+  .tw-card-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .tw-card-price {
+    justify-content: stretch;
+    text-align: left;
   }
 
 }
@@ -1003,6 +1149,10 @@ td {
 
   .holding-card-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tw-card-metric {
+    grid-template-columns: 1fr auto;
   }
 
   .donut-chart {

@@ -662,11 +662,17 @@ function normalizeTaiwanStockRow(row) {
   const price = toNumber(readColumn(row, ["現價", "目前股價", "收盤價", "單價", "價格", "淨值", "price", "Price"]));
   const previousClose = toNumber(readColumn(row, ["昨收", "昨日收盤", "昨日收盤價", "昨收價", "前收", "previousClose", "Previous Close"]));
   const explicitValue = toNumber(readColumn(row, ["現值", "市值", "目前市值", "庫存市值", "持有市值", "金額", "value", "Value", "Market Value"]));
+  const cost = toNumber(readColumn(row, ["買進成本", "購入成本", "成本", "庫存成本", "投入成本", "原始成本", "cost", "Cost"]));
+  const explicitCumulativeProfit = toNumber(readColumn(row, ["累積損益", "總損益", "未實現損益", "損益", "總獲利", "淨利", "profit", "Profit"]));
+  const dividend = toNumber(readColumn(row, ["累計股息", "股息", "配息", "股利", "dividend", "Dividend"]));
+  const explicitReturnRate = toPercent(readColumn(row, ["報酬率", "獲利（％）", "獲利(％)", "returnRate", "Return Rate"]));
   const sheetDailyChange = toMarketNumber(readColumn(row, ["今日漲跌", "漲跌", "漲跌金額", "今日漲跌金額", "單日漲跌", "change", "Change"]));
   const sheetDailyPercent = toMarketPercent(readColumn(row, ["今日漲跌幅", "漲跌幅", "單日漲跌幅", "changePercent", "Change Percent"]));
   const dailyChange = deriveDailyChangeFromSheet(sheetDailyChange, sheetDailyPercent, price, previousClose);
   const dailyPercent = deriveDailyPercentFromSheet(sheetDailyChange, sheetDailyPercent, price, previousClose);
   const value = explicitValue || quantity * price;
+  const cumulativeProfit = explicitCumulativeProfit || (cost > 0 ? value - cost : null);
+  const returnRate = explicitReturnRate || (cost > 0 && Number.isFinite(cumulativeProfit) ? (cumulativeProfit / cost) * 100 : null);
   const assetName = [stockCode, stockName].filter(Boolean).join(" ") || stockName;
   const isTaiwanStock = Boolean(stockCode || stockName);
 
@@ -681,6 +687,10 @@ function normalizeTaiwanStockRow(row) {
     baseValue: value,
     exchangeRate: 1,
     currency: readColumn(row, ["幣別", "currency", "Currency"]) || "TWD",
+    cost,
+    dividend,
+    cumulativeProfit,
+    returnRate,
     sheetDailyChange: dailyChange,
     sheetDailyPercent: dailyPercent,
   };
@@ -1772,45 +1782,119 @@ function renderHoldingCards(rows, query = "") {
   }
 
   elements.holdingCards.innerHTML = sortedRows
-    .map((row) => {
-      const identity = getHoldingIdentity(row);
-      const quote = getHoldingQuote(row);
-      const dailyAmount = quote ? quote.change * row.quantity * row.exchangeRate : null;
-      const trendClass = dailyAmount > 0 ? "is-up" : dailyAmount < 0 ? "is-down" : "is-flat";
-      const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
-      const dailyPercentLabel = quote ? formatPercent(quote.percent) : dailyAmountLabel;
-      return `
-        <article class="holding-card ${trendClass}">
-          <div class="holding-card-head">
-            <div>
-              <strong>${escapeHtml(identity.name)}</strong>
-              <span>${escapeHtml(identity.ticker)}</span>
-            </div>
-            <span class="market-badge">${escapeHtml(row.assetClass)}</span>
-          </div>
-          <div class="holding-card-main">
-            <span>目前總值</span>
-            <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
-          </div>
-          <div class="holding-card-metrics">
-            <div>
-              <span>股數</span>
-              <strong class="holding-card-quantity">${formatNumber(row.quantity)}</strong>
-            </div>
-            <div>
-              <span>今日漲跌</span>
-              <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
-            </div>
-            <div>
-              <span>漲跌幅</span>
-              <strong class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</strong>
-            </div>
-          </div>
-        </article>
-      `;
-    })
+    .map((row) => renderHoldingCard(row, sortedRows))
     .join("");
   applyPrivacyMasks();
+}
+
+function renderHoldingCard(row, rows) {
+  if (row.assetClass === "台股") {
+    return renderTaiwanHoldingCard(row, rows);
+  }
+
+  const identity = getHoldingIdentity(row);
+  const quote = getHoldingQuote(row);
+  const dailyAmount = quote ? quote.change * row.quantity * row.exchangeRate : null;
+  const trendClass = dailyAmount > 0 ? "is-up" : dailyAmount < 0 ? "is-down" : "is-flat";
+  const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
+  const dailyPercentLabel = quote ? formatPercent(quote.percent) : dailyAmountLabel;
+  return `
+    <article class="holding-card ${trendClass}">
+      <div class="holding-card-head">
+        <div>
+          <strong>${escapeHtml(identity.name)}</strong>
+          <span>${escapeHtml(identity.ticker)}</span>
+        </div>
+        <span class="market-badge">${escapeHtml(row.assetClass)}</span>
+      </div>
+      <div class="holding-card-main">
+        <span>目前總值</span>
+        <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
+      </div>
+      <div class="holding-card-metrics">
+        <div>
+          <span>股數</span>
+          <strong class="holding-card-quantity">${formatNumber(row.quantity)}</strong>
+        </div>
+        <div>
+          <span>今日漲跌</span>
+          <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
+        </div>
+        <div>
+          <span>漲跌幅</span>
+          <strong class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</strong>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderTaiwanHoldingCard(row, rows) {
+  const identity = getHoldingIdentity(row);
+  const quote = getHoldingQuote(row);
+  const dailyAmount = quote ? quote.change * row.quantity : null;
+  const dividend = getTaiwanHoldingDividend(row, identity);
+  const cumulativeProfit = Number.isFinite(row.cumulativeProfit) ? row.cumulativeProfit + dividend : null;
+  const returnRate = row.cost > 0 && Number.isFinite(cumulativeProfit) ? (cumulativeProfit / row.cost) * 100 : row.returnRate;
+  const totalValue = sum(rows, "baseValue");
+  const weight = totalValue > 0 ? (row.baseValue / totalValue) * 100 : 0;
+  const trendClass = dailyAmount > 0 ? "is-up" : dailyAmount < 0 ? "is-down" : "is-flat";
+  const profitClass = cumulativeProfit > 0 ? "is-up" : cumulativeProfit < 0 ? "is-down" : "is-flat";
+  const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
+  const dailyPercentLabel = quote ? formatPercent(quote.percent) : dailyAmountLabel;
+
+  return `
+    <article class="holding-card holding-card-tw ${trendClass}">
+      <div class="holding-card-head">
+        <div>
+          <strong>${escapeHtml(identity.name)}</strong>
+          <span>${escapeHtml(identity.ticker)}</span>
+        </div>
+        <span class="market-badge">${escapeHtml(row.assetClass)}</span>
+      </div>
+      <div class="tw-card-main">
+        <div>
+          <span>目前總值</span>
+          <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
+        </div>
+        <div class="tw-card-price">
+          <span>目前股價</span>
+          <strong class="holding-card-price">${formatNullableNumber(row.price, 2)}</strong>
+          <span>股數</span>
+          <strong class="holding-card-quantity">${formatNumber(row.quantity)}</strong>
+        </div>
+      </div>
+      <div class="tw-card-metrics">
+        <div class="tw-card-metric">
+          <span>即時損益</span>
+          <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
+          <em class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</em>
+        </div>
+        <div class="tw-card-metric ${profitClass}">
+          <span>累積損益</span>
+          <strong class="holding-card-profit">${formatNullableSignedMoney(cumulativeProfit)}</strong>
+          <em class="holding-card-return">${formatNullablePercent(returnRate)}</em>
+        </div>
+        <div class="tw-card-metric is-dividend">
+          <span>累計股息</span>
+          <strong class="holding-card-dividend">${formatNullableMoney(dividend)}</strong>
+          <em>股利紀錄彙總</em>
+        </div>
+        <div class="tw-card-metric">
+          <span>昨日收盤</span>
+          <strong class="holding-card-prev">${quote ? formatNullableNumber(row.price - quote.change, 2) : "--"}</strong>
+          <em>報酬率 ${escapeHtml(formatNullablePercent(returnRate))}</em>
+        </div>
+      </div>
+      <div class="tw-card-weight">
+        <div>
+          <span>持股權重</span>
+          <strong class="holding-card-weight">${formatWeightPercent(weight)}</strong>
+        </div>
+        <span class="tw-card-weight-track"><i style="width: ${Math.max(2, Math.min(weight, 100)).toFixed(2)}%"></i></span>
+      </div>
+    </article>
+  `;
 }
 
 function hideHoldingCards() {
@@ -1826,6 +1910,30 @@ function getHoldingQuote(row) {
   return quoteMap.get(row.ticker) || null;
 }
 
+function getTaiwanHoldingDividend(row, identity) {
+  if (row.dividend > 0) {
+    return row.dividend;
+  }
+  const ticker = normalizeMatchText(identity.ticker);
+  const name = normalizeMatchText(identity.name);
+  return viewData.dividendIncome.reduce((total, item) => {
+    const assetName = normalizeMatchText(item.assetName);
+    const matchesTicker = ticker.length >= 4 && assetName.includes(ticker);
+    const matchesName = name.length >= 2 && assetName.includes(name);
+    if (!assetName || (!matchesTicker && !matchesName)) {
+      return total;
+    }
+    return total + item.value;
+  }, 0);
+}
+
+function normalizeMatchText(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .replace(/[（）()]/g, "")
+    .toLowerCase();
+}
+
 function formatHoldingDailyValue(value) {
   if (dailyProfitState.status === "loading") {
     return "查詢中";
@@ -1834,6 +1942,36 @@ function formatHoldingDailyValue(value) {
     return "暫無行情";
   }
   return formatSignedMoney(value);
+}
+
+function formatNullableMoney(value) {
+  return Number.isFinite(value) ? formatMoney(value) : "--";
+}
+
+function formatNullableSignedMoney(value) {
+  return Number.isFinite(value) ? formatSignedMoney(value) : "--";
+}
+
+function formatNullablePercent(value) {
+  return Number.isFinite(value) ? formatPercent(value) : "--";
+}
+
+function formatNullableNumber(value, maximumFractionDigits = 0) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return new Intl.NumberFormat("zh-TW", {
+    maximumFractionDigits,
+  }).format(value);
+}
+
+function formatWeightPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return `${new Intl.NumberFormat("zh-TW", {
+    maximumFractionDigits: 1,
+  }).format(value)}%`;
 }
 
 function getHoldingIdentity(row) {
@@ -1877,6 +2015,12 @@ function applyPrivacyMasks() {
         ".holding-card-quantity",
         ".holding-card-delta",
         ".holding-card-percent",
+        ".holding-card-price",
+        ".holding-card-profit",
+        ".holding-card-return",
+        ".holding-card-dividend",
+        ".holding-card-prev",
+        ".holding-card-weight",
         "td.numeric",
       ].join(", "),
     )
