@@ -689,15 +689,24 @@ function normalizeTaiwanStockRow(row) {
 function parseForeignAccountRows(rows) {
   const usdToTwd = findUsdToTwdRate(rows);
   usdToTwdRate = usdToTwd;
+  const headerIndex = rows.findIndex((row) => row.some((cell) => String(cell || "").trim() === "代號／名稱"));
+  const headers = headerIndex >= 0 ? rows[headerIndex].map((cell) => String(cell || "").trim()) : [];
+
   return rows
     .map((row) => {
       const symbol = String(row[6] || "").trim();
       const originalQuantity = toNumber(row[7]);
-      const price = toNumber(row[10]);
-      const soldQuantity = toNumber(row[12]);
-      const remainingQuantity = toNumber(row[13]) || Math.max(originalQuantity - soldQuantity, 0);
+      const currentLayoutPrice = toNumber(row[11]);
+      const price = currentLayoutPrice || toNumber(row[10]);
+      const previousClose =
+        getRowNumberByHeaders(row, headers, ["昨收", "昨日收盤", "昨日收盤價", "昨收價", "前收", "previousClose", "Previous Close"]) ||
+        (currentLayoutPrice ? toNumber(row[9]) : 0);
+      const soldQuantity = currentLayoutPrice ? toNumber(row[13]) : toNumber(row[12]);
+      const remainingQuantity = (currentLayoutPrice ? toNumber(row[14]) : toNumber(row[13])) || Math.max(originalQuantity - soldQuantity, 0);
       const value = remainingQuantity * price;
       const baseValue = value * usdToTwd;
+      const dailyChange = deriveDailyChangeFromSheet(null, null, price, previousClose);
+      const dailyPercent = deriveDailyPercentFromSheet(null, null, price, previousClose);
 
       return {
         ticker: symbol,
@@ -710,6 +719,8 @@ function parseForeignAccountRows(rows) {
         baseValue,
         exchangeRate: usdToTwd,
         currency: "USD",
+        sheetDailyChange: dailyChange,
+        sheetDailyPercent: dailyPercent,
       };
     })
     .filter((row) => /^[A-Z][A-Z0-9.-]{0,9}$/.test(row.assetName) && row.quantity > 0 && row.price > 0);
@@ -717,6 +728,8 @@ function parseForeignAccountRows(rows) {
 
 function parseUsSummaryRows(rows, quoteRows) {
   const priceBySymbol = new Map(quoteRows.map((row) => [row.assetName, row.price]));
+  const quoteBySymbol = new Map(quoteRows.map((row) => [row.assetName, row]));
+  const summaryQuoteBySymbol = getUsSummarySheetQuotes(rows);
   const lotsBySymbol = new Map();
   const realizedBySymbol = new Map();
 
@@ -786,6 +799,12 @@ function parseUsSummaryRows(rows, quoteRows) {
       const cost = lots.reduce((total, lot) => total + lot.remainingCost, 0);
       const price = priceBySymbol.get(symbol) || (quantity ? cost / quantity : 0);
       const value = quantity * price;
+      const summaryQuote = summaryQuoteBySymbol.get(symbol);
+      const foreignQuote = quoteBySymbol.get(symbol);
+      const summaryDailyChange = deriveDailyChangeFromSheet(summaryQuote?.change ?? null, summaryQuote?.percent ?? null, price, summaryQuote?.previousClose || 0);
+      const summaryDailyPercent = deriveDailyPercentFromSheet(summaryQuote?.change ?? null, summaryQuote?.percent ?? null, price, summaryQuote?.previousClose || 0);
+      const sheetDailyChange = summaryDailyChange ?? foreignQuote?.sheetDailyChange ?? null;
+      const sheetDailyPercent = summaryDailyPercent ?? foreignQuote?.sheetDailyPercent ?? null;
       return {
         ticker: symbol,
         assetClass: "美股",
@@ -797,6 +816,8 @@ function parseUsSummaryRows(rows, quoteRows) {
         baseValue: value * usdToTwdRate,
         exchangeRate: usdToTwdRate,
         currency: "USD",
+        sheetDailyChange,
+        sheetDailyPercent,
       };
     })
     .filter((row) => row.quantity > 0 && row.value > 0);
@@ -811,6 +832,28 @@ function parseUsSummaryRows(rows, quoteRows) {
     .filter((row) => row.cost > 0 || row.dividend > 0);
 
   return { holdings, realized };
+}
+
+function getUsSummarySheetQuotes(rows) {
+  return rows.reduce((quotes, row) => {
+    const symbol = readColumn(row, ["代號／名稱"]);
+    if (!symbol) {
+      return quotes;
+    }
+    const price = toNumber(readColumn(row, ["現價", "目前股價", "收盤價", "單價", "價格", "price", "Price"]));
+    const previousClose = toNumber(readColumn(row, ["昨收", "昨日收盤", "昨日收盤價", "昨收價", "前收", "previousClose", "Previous Close"]));
+    const explicitChange = toMarketNumber(readColumn(row, ["今日漲跌", "漲跌", "漲跌金額", "今日漲跌金額", "單日漲跌", "change", "Change"]));
+    const explicitPercent = toMarketPercent(readColumn(row, ["今日漲跌幅", "漲跌幅", "單日漲跌幅", "changePercent", "Change Percent"]));
+    const change = deriveDailyChangeFromSheet(explicitChange, explicitPercent, price, previousClose);
+    const percent = deriveDailyPercentFromSheet(explicitChange, explicitPercent, price, previousClose);
+
+    if (Number.isFinite(change) && Number.isFinite(percent)) {
+      quotes.set(symbol, { change, percent, previousClose });
+    } else if (previousClose > 0) {
+      quotes.set(symbol, { change: null, percent: null, previousClose });
+    }
+    return quotes;
+  }, new Map());
 }
 
 function isUsSummaryTransactionRow(row) {
@@ -939,7 +982,13 @@ async function fetchUsDailyProfit(rows) {
   }
 
   const symbols = [...new Set(holdings.map((row) => row.ticker))];
-  const quotes = await fetchUsQuoteBatch(symbols);
+  const sheetQuotes = getSheetUsQuotes(holdings);
+  const missingSymbols = symbols.filter((symbol) => !sheetQuotes.has(symbol));
+  const quotes = new Map(sheetQuotes);
+  const marketQuotes = await fetchUsQuoteBatch(missingSymbols);
+  marketQuotes.forEach((quote, symbol) => {
+    quotes.set(symbol, quote);
+  });
 
   return {
     total: quotes.size ? holdings.reduce((total, row) => total + (quotes.get(row.ticker)?.change || 0) * row.quantity * row.exchangeRate, 0) : null,
@@ -947,8 +996,25 @@ async function fetchUsDailyProfit(rows) {
   };
 }
 
+function getSheetUsQuotes(rows) {
+  return rows.reduce((quotes, row) => {
+    if (!row.ticker || !Number.isFinite(row.sheetDailyChange) || !Number.isFinite(row.sheetDailyPercent)) {
+      return quotes;
+    }
+    quotes.set(row.ticker, {
+      change: row.sheetDailyChange,
+      percent: row.sheetDailyPercent,
+      source: "sheet",
+    });
+    return quotes;
+  }, new Map());
+}
+
 async function fetchUsQuoteBatch(symbols) {
   const quotes = new Map();
+  if (!symbols.length) {
+    return quotes;
+  }
   const results = await Promise.allSettled(
     symbols.map(async (symbol) => {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
@@ -1152,6 +1218,16 @@ function findUsdToTwdRate(rows) {
 function readColumn(row, names) {
   const key = names.find((name) => Object.prototype.hasOwnProperty.call(row, name));
   return key ? row[key] : "";
+}
+
+function getRowNumberByHeaders(row, headers, names) {
+  const index = names.reduce((matchedIndex, name) => {
+    if (matchedIndex >= 0) {
+      return matchedIndex;
+    }
+    return headers.indexOf(name);
+  }, -1);
+  return index >= 0 ? toNumber(row[index]) : 0;
 }
 
 function toNumber(value) {
