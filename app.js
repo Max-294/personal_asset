@@ -664,7 +664,7 @@ function normalizeTaiwanStockRow(row) {
   const explicitValue = toNumber(readColumn(row, ["現值", "市值", "目前市值", "庫存市值", "持有市值", "金額", "value", "Value", "Market Value"]));
   const cost = toNumber(readColumn(row, ["買進成本", "購入成本", "成本", "庫存成本", "投入成本", "原始成本", "cost", "Cost"]));
   const explicitCumulativeProfit = toNumber(readColumn(row, ["累積損益", "累計損益", "含息損益", "總損益", "未實現損益", "損益", "總獲利", "淨利", "profit", "Profit"]));
-  const dividend = toNumber(readColumn(row, ["累計股息", "累積股息", "股息", "配息", "股利", "dividend", "Dividend"]));
+  const dividend = toNumber(readColumn(row, ["已領股息", "累計股息", "累積股息", "股息", "配息", "股利", "dividend", "Dividend"]));
   const explicitReturnRate = toPercent(readColumn(row, ["報酬率", "獲利（％）", "獲利(％)", "returnRate", "Return Rate"]));
   const sheetDailyChange = toMarketNumber(readColumn(row, ["今日漲跌", "漲跌", "漲跌金額", "今日漲跌金額", "單日漲跌", "change", "Change"]));
   const sheetDailyPercent = toMarketPercent(readColumn(row, ["今日漲跌幅", "漲跌幅", "單日漲跌幅", "changePercent", "Change Percent"]));
