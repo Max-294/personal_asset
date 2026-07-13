@@ -797,6 +797,64 @@ body[data-view="holdings"] #accountCount {
   display: none;
 }
 
+.holding-cards-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.holding-cards-tools > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.holding-sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.holding-sort-control label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.holding-sort-control select {
+  min-width: 122px;
+  border: 1px solid rgba(18, 60, 52, 0.16);
+  border-radius: 6px;
+  padding: 7px 28px 7px 9px;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.88);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.holding-sort-direction {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(18, 60, 52, 0.16);
+  border-radius: 6px;
+  padding: 0;
+  color: var(--accent-dark);
+  background: rgba(255, 253, 248, 0.88);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.holding-sort-control select:focus-visible,
+.holding-sort-direction:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .holding-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -1439,6 +1497,14 @@ td {
 
   .holding-cards {
     grid-template-columns: 1fr;
+  }
+
+  .holding-cards-panel .panel-header {
+    align-items: flex-start;
+  }
+
+  .holding-cards-tools {
+    justify-content: flex-start;
   }
 
   .holding-card-metrics {

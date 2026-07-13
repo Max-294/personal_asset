@@ -100,6 +100,10 @@ let tableSort = {
   key: "dateValue",
   direction: "desc",
 };
+let holdingCardSort = {
+  key: "weight",
+  direction: "desc",
+};
 let privacyMode = localStorage.getItem("assetDashboardPrivacy") === "hidden";
 
 const viewConfigs = {
@@ -222,6 +226,8 @@ const elements = {
   holdingCardsPanel: document.querySelector("#holdingCardsPanel"),
   holdingCards: document.querySelector("#holdingCards"),
   holdingCardsMeta: document.querySelector("#holdingCardsMeta"),
+  holdingSort: document.querySelector("#holdingSort"),
+  holdingSortDirection: document.querySelector("#holdingSortDirection"),
   detailTitle: document.querySelector("#detailTitle"),
   tableHead: document.querySelector("#tableHead"),
   assetRows: document.querySelector("#assetRows"),
@@ -248,6 +254,17 @@ elements.tableSearch.addEventListener("input", () => {
   if (currentView === "holdings") {
     renderHoldingCards(currentRows, elements.tableSearch.value);
   }
+});
+
+elements.holdingSort.addEventListener("change", () => {
+  holdingCardSort.key = elements.holdingSort.value;
+  renderHoldingCards(currentRows, elements.tableSearch.value);
+});
+
+elements.holdingSortDirection.addEventListener("click", () => {
+  holdingCardSort.direction = holdingCardSort.direction === "desc" ? "asc" : "desc";
+  updateHoldingCardSortControls();
+  renderHoldingCards(currentRows, elements.tableSearch.value);
 });
 
 elements.tableHead.addEventListener("click", (event) => {
@@ -1847,31 +1864,76 @@ function renderHoldingCards(rows, query = "") {
   }
 
   elements.holdingCardsPanel.classList.remove("is-hidden");
-  const sortedRows = sortRows(filterRowsByQuery(rows, query)).sort((a, b) => b.baseValue - a.baseValue);
+  const filteredRows = filterRowsByQuery(rows, query);
+  const totalPortfolioValue = sum(rows, "baseValue");
+  const sortedRows = sortHoldingCards(filteredRows, totalPortfolioValue);
+  updateHoldingCardSortControls();
+  const sortLabel = getHoldingCardSortLabel();
   elements.holdingCardsMeta.textContent = query.trim()
-    ? `符合搜尋的 ${sortedRows.length} 檔`
-    : `共 ${sortedRows.length} 檔，依目前市值排序`;
+    ? `符合搜尋的 ${sortedRows.length} 檔，依${sortLabel}排序`
+    : `共 ${sortedRows.length} 檔，依${sortLabel}排序`;
   if (!sortedRows.length) {
     elements.holdingCards.innerHTML = '<p class="empty">目前沒有可顯示的持股卡片。</p>';
     return;
   }
 
   elements.holdingCards.innerHTML = sortedRows
-    .map((row) => renderHoldingCard(row, sortedRows))
+    .map((row) => renderHoldingCard(row, totalPortfolioValue))
     .join("");
   applyPrivacyMasks();
 }
 
-function renderHoldingCard(row, rows) {
+function sortHoldingCards(rows, totalPortfolioValue) {
+  const direction = holdingCardSort.direction === "asc" ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const leftValue = getHoldingCardSortValue(left, totalPortfolioValue);
+    const rightValue = getHoldingCardSortValue(right, totalPortfolioValue);
+    if (leftValue === rightValue) {
+      return String(left.assetName).localeCompare(String(right.assetName), "zh-Hant");
+    }
+    if (leftValue === null) return 1;
+    if (rightValue === null) return -1;
+    return (leftValue - rightValue) * direction;
+  });
+}
+
+function getHoldingCardSortValue(row, totalPortfolioValue) {
+  if (holdingCardSort.key === "weight") {
+    return totalPortfolioValue > 0 ? row.baseValue / totalPortfolioValue : 0;
+  }
+  if (holdingCardSort.key === "dailyProfit") {
+    return getHoldingDailyAmount(row);
+  }
+  const value = row[holdingCardSort.key];
+  return Number.isFinite(value) ? value : null;
+}
+
+function getHoldingCardSortLabel() {
+  const label = {
+    weight: "持股權重",
+    cumulativeProfit: "累積獲利",
+    dailyProfit: "即時損益",
+    dividend: "股息",
+  }[holdingCardSort.key];
+  return `${label}${holdingCardSort.direction === "asc" ? "由低至高" : "由高至低"}`;
+}
+
+function updateHoldingCardSortControls() {
+  elements.holdingSort.value = holdingCardSort.key;
+  const ascending = holdingCardSort.direction === "asc";
+  elements.holdingSortDirection.querySelector("span").textContent = ascending ? "↑" : "↓";
+  elements.holdingSortDirection.setAttribute("aria-label", ascending ? "改為由高至低排序" : "改為由低至高排序");
+  elements.holdingSortDirection.title = ascending ? "改為由高至低排序" : "改為由低至高排序";
+}
+
+function renderHoldingCard(row, totalPortfolioValue) {
   const identity = getHoldingIdentity(row);
   const quote = getHoldingQuote(row);
-  const exchangeRate = row.assetClass === "美股" ? row.exchangeRate : 1;
-  const dailyAmount = quote ? quote.change * row.quantity * exchangeRate : null;
+  const dailyAmount = getHoldingDailyAmount(row);
   const dividend = Number.isFinite(row.dividend) ? row.dividend : null;
   const cumulativeProfit = Number.isFinite(row.cumulativeProfit) ? row.cumulativeProfit : null;
   const returnRate = row.cost > 0 && Number.isFinite(cumulativeProfit) ? (cumulativeProfit / row.cost) * 100 : row.returnRate;
-  const totalValue = sum(rows, "baseValue");
-  const weight = totalValue > 0 ? (row.baseValue / totalValue) * 100 : 0;
+  const weight = totalPortfolioValue > 0 ? (row.baseValue / totalPortfolioValue) * 100 : 0;
   const trendClass = dailyAmount > 0 ? "is-up" : dailyAmount < 0 ? "is-down" : "is-flat";
   const profitClass = cumulativeProfit > 0 ? "is-up" : cumulativeProfit < 0 ? "is-down" : "is-flat";
   const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
@@ -1926,6 +1988,15 @@ function renderHoldingCard(row, rows) {
       </div>
     </article>
   `;
+}
+
+function getHoldingDailyAmount(row) {
+  const quote = getHoldingQuote(row);
+  if (!quote) {
+    return null;
+  }
+  const exchangeRate = row.assetClass === "美股" ? row.exchangeRate : 1;
+  return quote.change * row.quantity * exchangeRate;
 }
 
 function hideHoldingCards() {

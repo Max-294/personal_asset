@@ -98,7 +98,21 @@
             <p class="panel-eyebrow">Portfolio desk</p>
             <h2>持股儀表板</h2>
           </div>
-          <span id="holdingCardsMeta">依目前市值排序</span>
+          <div class="holding-cards-tools">
+            <span id="holdingCardsMeta">依持股權重排序</span>
+            <div class="holding-sort-control">
+              <label for="holdingSort">排序</label>
+              <select id="holdingSort" aria-label="持股儀表板排序依據">
+                <option value="weight">持股權重</option>
+                <option value="cumulativeProfit">累積獲利</option>
+                <option value="dailyProfit">即時損益</option>
+                <option value="dividend">股息</option>
+              </select>
+              <button type="button" id="holdingSortDirection" class="holding-sort-direction" aria-label="改為由低至高排序" title="改為由低至高排序">
+                <span aria-hidden="true">↓</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div id="holdingCards" class="holding-cards"></div>
       </section>
