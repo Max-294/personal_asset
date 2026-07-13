@@ -134,8 +134,8 @@ const viewConfigs = {
     secondLabel: "台股漲跌檔數",
     thirdLabel: "美股漲跌檔數",
     fourthLabel: "最大配置",
-    allocationTitle: "資產配置",
-    barTitle: "市場分布",
+    allocationTitle: "市場配置",
+    barTitle: "市場市值",
     barSubtitle: "台股與美股市值",
     detailTitle: "資產明細",
     totalLabel: (value) => formatMoney(value),
@@ -221,6 +221,7 @@ const elements = {
   accountBars: document.querySelector("#accountBars"),
   holdingCardsPanel: document.querySelector("#holdingCardsPanel"),
   holdingCards: document.querySelector("#holdingCards"),
+  holdingCardsMeta: document.querySelector("#holdingCardsMeta"),
   detailTitle: document.querySelector("#detailTitle"),
   tableHead: document.querySelector("#tableHead"),
   assetRows: document.querySelector("#assetRows"),
@@ -806,9 +807,13 @@ function parseUsSummaryRows(rows, quoteRows) {
   const holdings = [...lotsBySymbol.entries()]
     .map(([symbol, lots]) => {
       const quantity = lots.reduce((total, lot) => total + lot.remainingQuantity, 0);
-      const cost = lots.reduce((total, lot) => total + lot.remainingCost, 0);
-      const price = priceBySymbol.get(symbol) || (quantity ? cost / quantity : 0);
+      const remainingCost = lots.reduce((total, lot) => total + lot.remainingCost, 0);
+      const price = priceBySymbol.get(symbol) || (quantity ? remainingCost / quantity : 0);
       const value = quantity * price;
+      const realized = realizedBySymbol.get(symbol);
+      const dividendUsd = realized?.dividend || 0;
+      // Current holdings exclude historical sale gains, which are shown in the realized P/L tab.
+      const cumulativeProfitUsd = value - remainingCost + dividendUsd;
       const summaryQuote = summaryQuoteBySymbol.get(symbol);
       const foreignQuote = quoteBySymbol.get(symbol);
       const summaryDailyChange = deriveDailyChangeFromSheet(summaryQuote?.change ?? null, summaryQuote?.percent ?? null, price, summaryQuote?.previousClose || 0);
@@ -824,6 +829,10 @@ function parseUsSummaryRows(rows, quoteRows) {
         price,
         value,
         baseValue: value * usdToTwdRate,
+        cost: remainingCost * usdToTwdRate,
+        dividend: dividendUsd * usdToTwdRate,
+        cumulativeProfit: cumulativeProfitUsd * usdToTwdRate,
+        returnRate: remainingCost > 0 ? (cumulativeProfitUsd / remainingCost) * 100 : null,
         exchangeRate: usdToTwdRate,
         currency: "USD",
         sheetDailyChange,
@@ -867,7 +876,14 @@ function getUsSummarySheetQuotes(rows) {
 }
 
 function isUsSummaryTransactionRow(row) {
-  if (!row.symbol || row.quantity <= 0) {
+  if (!row.symbol) {
+    return false;
+  }
+  // Dividend rows commonly have no share count, but still contribute to total return.
+  if (row.type === "股息") {
+    return row.total > 0;
+  }
+  if (row.quantity <= 0) {
     return false;
   }
   if (isUsSummaryLotAddition(row.type)) {
@@ -1832,6 +1848,9 @@ function renderHoldingCards(rows, query = "") {
 
   elements.holdingCardsPanel.classList.remove("is-hidden");
   const sortedRows = sortRows(filterRowsByQuery(rows, query)).sort((a, b) => b.baseValue - a.baseValue);
+  elements.holdingCardsMeta.textContent = query.trim()
+    ? `符合搜尋的 ${sortedRows.length} 檔`
+    : `共 ${sortedRows.length} 檔，依目前市值排序`;
   if (!sortedRows.length) {
     elements.holdingCards.innerHTML = '<p class="empty">目前沒有可顯示的持股卡片。</p>';
     return;
@@ -1844,51 +1863,10 @@ function renderHoldingCards(rows, query = "") {
 }
 
 function renderHoldingCard(row, rows) {
-  if (row.assetClass === "台股") {
-    return renderTaiwanHoldingCard(row, rows);
-  }
-
   const identity = getHoldingIdentity(row);
   const quote = getHoldingQuote(row);
-  const dailyAmount = quote ? quote.change * row.quantity * row.exchangeRate : null;
-  const trendClass = dailyAmount > 0 ? "is-up" : dailyAmount < 0 ? "is-down" : "is-flat";
-  const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
-  const dailyPercentLabel = quote ? formatPercent(quote.percent) : dailyAmountLabel;
-  return `
-    <article class="holding-card ${trendClass}">
-      <div class="holding-card-head">
-        <div>
-          <strong>${escapeHtml(identity.name)}</strong>
-          <span>${escapeHtml(identity.ticker)}</span>
-        </div>
-        <span class="market-badge">${escapeHtml(row.assetClass)}</span>
-      </div>
-      <div class="holding-card-main">
-        <span>目前總值</span>
-        <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
-      </div>
-      <div class="holding-card-metrics">
-        <div>
-          <span>股數</span>
-          <strong class="holding-card-quantity">${formatNumber(row.quantity)}</strong>
-        </div>
-        <div>
-          <span>今日漲跌</span>
-          <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
-        </div>
-        <div>
-          <span>漲跌幅</span>
-          <strong class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</strong>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-function renderTaiwanHoldingCard(row, rows) {
-  const identity = getHoldingIdentity(row);
-  const quote = getHoldingQuote(row);
-  const dailyAmount = quote ? quote.change * row.quantity : null;
+  const exchangeRate = row.assetClass === "美股" ? row.exchangeRate : 1;
+  const dailyAmount = quote ? quote.change * row.quantity * exchangeRate : null;
   const dividend = Number.isFinite(row.dividend) ? row.dividend : null;
   const cumulativeProfit = Number.isFinite(row.cumulativeProfit) ? row.cumulativeProfit : null;
   const returnRate = row.cost > 0 && Number.isFinite(cumulativeProfit) ? (cumulativeProfit / row.cost) * 100 : row.returnRate;
@@ -1898,56 +1876,53 @@ function renderTaiwanHoldingCard(row, rows) {
   const profitClass = cumulativeProfit > 0 ? "is-up" : cumulativeProfit < 0 ? "is-down" : "is-flat";
   const dailyAmountLabel = formatHoldingDailyValue(dailyAmount);
   const dailyPercentLabel = quote ? formatPercent(quote.percent) : dailyAmountLabel;
-
   return `
-    <article class="holding-card holding-card-tw ${trendClass}">
+    <article class="holding-card holding-card-desk ${trendClass}">
       <div class="holding-card-head">
         <div>
           <strong>${escapeHtml(identity.name)}</strong>
           <span>${escapeHtml(identity.ticker)}</span>
         </div>
-        <span class="market-badge">${escapeHtml(row.assetClass)}</span>
+        <div class="holding-card-trend">
+          <span class="market-badge">${escapeHtml(row.assetClass)}</span>
+          <strong class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</strong>
+        </div>
       </div>
-      <div class="tw-card-main">
-        <div>
+      <div class="holding-card-value-row">
+        <div class="holding-card-main">
           <span>目前總值</span>
           <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
         </div>
-        <div class="tw-card-price">
+        <div class="holding-card-day ${trendClass}">
+          <span>今日漲跌</span>
+          <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
+        </div>
+      </div>
+      <div class="holding-card-quote-row">
+        <div>
           <span>目前股價</span>
           <strong class="holding-card-price">${formatNullableNumber(row.price, 2)}</strong>
-          <span>股數</span>
+        </div>
+        <div>
+          <span>持有股數</span>
           <strong class="holding-card-quantity">${formatNumber(row.quantity)}</strong>
         </div>
-      </div>
-      <div class="tw-card-metrics">
-        <div class="tw-card-metric">
-          <span>即時損益</span>
-          <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
-          <em class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</em>
-        </div>
-        <div class="tw-card-metric ${profitClass}">
-          <span>累積損益</span>
-          <strong class="holding-card-profit">${formatNullableSignedMoney(cumulativeProfit)}</strong>
-          <em class="holding-card-return">${formatNullablePercent(returnRate)}</em>
-        </div>
-        <div class="tw-card-metric is-dividend">
-          <span>累計股息</span>
-          <strong class="holding-card-dividend">${formatNullableMoney(dividend)}</strong>
-          <em>表格欄位</em>
-        </div>
-        <div class="tw-card-metric">
-          <span>昨日收盤</span>
-          <strong class="holding-card-prev">${quote ? formatNullableNumber(row.price - quote.change, 2) : "--"}</strong>
-          <em>報酬率 ${escapeHtml(formatNullablePercent(returnRate))}</em>
-        </div>
-      </div>
-      <div class="tw-card-weight">
         <div>
           <span>持股權重</span>
           <strong class="holding-card-weight">${formatWeightPercent(weight)}</strong>
         </div>
-        <span class="tw-card-weight-track"><i style="width: ${Math.max(2, Math.min(weight, 100)).toFixed(2)}%"></i></span>
+      </div>
+      <div class="holding-card-lifecycle">
+        <div class="${profitClass}">
+          <span>累積損益</span>
+          <strong class="holding-card-profit">${formatNullableSignedMoney(cumulativeProfit)}</strong>
+          <em>${formatNullablePercent(returnRate)}</em>
+        </div>
+        <div>
+          <span>累計股息</span>
+          <strong class="holding-card-dividend">${formatNullableMoney(dividend)}</strong>
+          <em>${row.assetClass === "台股" ? "已領股息" : "交易資料"}</em>
+        </div>
       </div>
     </article>
   `;

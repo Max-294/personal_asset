@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>個人化資產配置與管理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
+    />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -88,8 +94,11 @@
 
       <section id="holdingCardsPanel" class="panel holding-cards-panel is-hidden">
         <div class="panel-header">
-          <h2>持股儀表板</h2>
-          <span>每檔目前市值與今日變化</span>
+          <div>
+            <p class="panel-eyebrow">Portfolio desk</p>
+            <h2>持股儀表板</h2>
+          </div>
+          <span id="holdingCardsMeta">依目前市值排序</span>
         </div>
         <div id="holdingCards" class="holding-cards"></div>
       </section>

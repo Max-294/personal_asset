@@ -14,9 +14,14 @@
   --gold: #c6a464;
   --shadow: 0 18px 44px rgba(18, 60, 52, 0.1);
   --soft-shadow: 0 10px 28px rgba(18, 60, 52, 0.07);
-  font-family:
-    ui-serif, Georgia, "Times New Roman", "Noto Serif TC", "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 140ms;
+  --motion-standard: 200ms;
+  --font-ui: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+  font-kerning: normal;
 }
 
 * {
@@ -107,6 +112,11 @@ h2 {
   font-size: 0.86rem;
   color: #15382f;
   background: linear-gradient(180deg, #d6b66f, #b89455);
+  box-shadow: 0 6px 14px rgba(8, 31, 26, 0.16);
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-standard) var(--ease-out),
+    filter var(--motion-fast) ease;
 }
 
 .header-actions {
@@ -126,6 +136,10 @@ h2 {
   color: #15382f;
   border: 1px solid rgba(214, 182, 111, 0.7);
   background: rgba(248, 243, 232, 0.9);
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background-color var(--motion-standard) ease,
+    box-shadow var(--motion-standard) var(--ease-out);
 }
 
 .icon-action svg {
@@ -175,9 +189,13 @@ main {
   padding: 0 16px;
   color: #4f635b;
   background: transparent;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+  font-family: var(--font-ui);
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    color var(--motion-standard) ease,
+    background-color var(--motion-standard) ease,
+    box-shadow var(--motion-standard) var(--ease-out),
+    border-color var(--motion-standard) ease;
 }
 
 .tab-button.is-active {
@@ -215,9 +233,10 @@ input {
   color: var(--ink);
   background: #fffdf8;
   outline: none;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+  font-family: var(--font-ui);
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-standard) var(--ease-out);
 }
 
 input:focus {
@@ -233,9 +252,52 @@ button {
   color: #fff;
   background: var(--accent-dark);
   cursor: pointer;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+  font-family: var(--font-ui);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(214, 182, 111, 0.5);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .header-action:hover {
+    filter: brightness(1.04);
+    box-shadow: 0 10px 20px rgba(8, 31, 26, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .icon-action:hover {
+    background: #fffdf8;
+    box-shadow: 0 8px 16px rgba(8, 31, 26, 0.16);
+    transform: translateY(-1px);
+  }
+
+  .tab-button:not(.is-active):hover {
+    color: var(--accent-dark);
+    background: rgba(184, 148, 85, 0.1);
+  }
+
+  .sort-button:hover {
+    color: var(--accent-dark);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 button.secondary {
@@ -737,7 +799,7 @@ body[data-view="holdings"] #accountCount {
 
 .holding-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 14px;
 }
 
@@ -758,6 +820,169 @@ body[data-view="holdings"] #accountCount {
     linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(250, 246, 237, 0.92)),
     var(--surface);
   box-shadow: 0 12px 24px rgba(18, 60, 52, 0.07);
+}
+
+.panel-eyebrow {
+  margin: 0 0 3px;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.holding-card-desk {
+  gap: 15px;
+  border-left-width: 4px;
+}
+
+.holding-card-trend {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.holding-card-trend .holding-card-percent {
+  font-size: 0.88rem;
+}
+
+.holding-card-value-row {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.holding-card-day {
+  display: grid;
+  gap: 4px;
+  min-width: 108px;
+  border: 1px solid rgba(18, 60, 52, 0.1);
+  border-radius: 6px;
+  padding: 9px 10px;
+  text-align: right;
+}
+
+.holding-card-day.is-up {
+  border-color: rgba(79, 119, 82, 0.22);
+  background: rgba(79, 119, 82, 0.1);
+}
+
+.holding-card-day.is-down {
+  border-color: rgba(168, 95, 87, 0.22);
+  background: rgba(168, 95, 87, 0.1);
+}
+
+.holding-card-day.is-flat {
+  background: rgba(18, 60, 52, 0.05);
+}
+
+.holding-card-day span,
+.holding-card-quote-row span,
+.holding-card-lifecycle span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.holding-card-day strong {
+  color: var(--ink);
+  font-size: 0.96rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.holding-card-day.is-up strong {
+  color: #326b3c;
+}
+
+.holding-card-day.is-down strong {
+  color: #994b45;
+}
+
+.holding-card-quote-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(18, 60, 52, 0.09);
+  border-bottom: 1px solid rgba(18, 60, 52, 0.09);
+}
+
+.holding-card-quote-row div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 10px;
+}
+
+.holding-card-quote-row div + div {
+  border-left: 1px solid rgba(18, 60, 52, 0.09);
+}
+
+.holding-card-quote-row strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holding-card-lifecycle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.holding-card-lifecycle > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  min-width: 0;
+  border: 1px solid rgba(18, 60, 52, 0.09);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(18, 60, 52, 0.035);
+}
+
+.holding-card-lifecycle strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holding-card-lifecycle em {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.holding-card-lifecycle > .is-up strong,
+.holding-card-lifecycle > .is-up em {
+  color: #4f7752;
+}
+
+.holding-card-lifecycle > .is-up {
+  border-color: rgba(79, 119, 82, 0.2);
+  background: rgba(79, 119, 82, 0.08);
+}
+
+.holding-card-lifecycle > .is-down strong,
+.holding-card-lifecycle > .is-down em {
+  color: #a85f57;
+}
+
+.holding-card-lifecycle > .is-down {
+  border-color: rgba(168, 95, 87, 0.2);
+  background: rgba(168, 95, 87, 0.08);
 }
 
 .holding-card.is-up {
@@ -1164,6 +1389,10 @@ td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .holding-card-quote-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .tw-card-main,
   .tw-card-metrics {
     grid-template-columns: 1fr;
@@ -1214,6 +1443,10 @@ td {
 
   .holding-card-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .holding-card-quote-row div {
+    padding-inline: 7px;
   }
 
   .tw-card-metric {
