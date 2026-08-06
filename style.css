@@ -797,6 +797,10 @@ body[data-view="holdings"] #accountCount {
   display: none;
 }
 
+.annual-net-assets-panel.is-hidden {
+  display: none;
+}
+
 .holding-cards-tools {
   display: flex;
   align-items: center;

@@ -223,6 +223,8 @@ const elements = {
   barSubtitle: document.querySelector("#barSubtitle"),
   allocationChart: document.querySelector("#allocationChart"),
   accountBars: document.querySelector("#accountBars"),
+  annualNetAssetPanel: document.querySelector("#annualNetAssetPanel"),
+  annualNetAssetChart: document.querySelector("#annualNetAssetChart"),
   holdingCardsPanel: document.querySelector("#holdingCardsPanel"),
   holdingCards: document.querySelector("#holdingCards"),
   holdingCardsMeta: document.querySelector("#holdingCardsMeta"),
@@ -1345,6 +1347,7 @@ function renderDashboard(rows) {
     renderOverviewDashboard(rows, config);
     return;
   }
+  hideAnnualNetAssetChart();
   const isRealizedView = currentView !== "holdings";
   const total = sum(rows, "baseValue");
   const chartRows = rows;
@@ -1415,6 +1418,7 @@ function renderOverviewDashboard(rows, config) {
 
   renderDonut(new Map(composition.map((item) => [item.name, item.value])), compositionTotal);
   renderLineChart(rows);
+  renderAnnualNetAssetChart(rows);
   renderTableHead();
   renderTable(rows, elements.tableSearch.value);
   applyPrivacyMasks();
@@ -1679,16 +1683,48 @@ function renderAnnualDividendChart(rows) {
     map.set(row.year, (map.get(row.year) || 0) + row.value);
     return map;
   }, new Map());
-  const entries = [...grouped.entries()]
-    .filter(([year, value]) => /^\d{4}$/.test(year) && value > 0)
+  return renderAnnualValueChart([...grouped.entries()], {
+    title: "年度股息收入",
+    label: "股息收入",
+    latestLabel: "截至目前",
+    emptyMessage: "尚無股息資料",
+  });
+}
+
+function renderAnnualNetAssetChart(rows) {
+  elements.annualNetAssetPanel.classList.remove("is-hidden");
+  const latestByYear = rows.reduce((map, row) => {
+    const year = String(new Date(row.dateValue).getFullYear());
+    const existing = map.get(year);
+    if (row.displayNetAsset > 0 && (!existing || row.dateValue > existing.dateValue)) {
+      map.set(year, row);
+    }
+    return map;
+  }, new Map());
+  const entries = [...latestByYear.entries()].map(([year, row]) => [year, row.displayNetAsset]);
+  elements.annualNetAssetChart.innerHTML = renderAnnualValueChart(entries, {
+    label: "淨資產",
+    latestLabel: "年底",
+    emptyMessage: "尚無足夠的年度淨資產資料",
+  });
+}
+
+function hideAnnualNetAssetChart() {
+  elements.annualNetAssetPanel.classList.add("is-hidden");
+  elements.annualNetAssetChart.innerHTML = "";
+}
+
+function renderAnnualValueChart(sourceEntries, { title = "", label, latestLabel, emptyMessage }) {
+  const entries = sourceEntries
+    .filter(([year, value]) => /^\d{4}$/.test(String(year)) && value > 0)
     .sort((a, b) => Number(a[0]) - Number(b[0]));
   const maxValue = Math.max(...entries.map(([, value]) => value), 0);
 
   if (!entries.length || !maxValue) {
     return `
-      <div class="ranking-section dividend-section">
-        <h3>年度股息收入</h3>
-        <p class="empty compact-empty">尚無股息資料</p>
+      <div class="ranking-section dividend-section annual-value-section">
+        ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
+        <p class="empty compact-empty">${escapeHtml(emptyMessage)}</p>
       </div>
     `;
   }
@@ -1707,7 +1743,7 @@ function renderAnnualDividendChart(rows) {
       return `
         <div class="dividend-year ${trendClass}">
           <span class="dividend-value">${formatCompactMoney(value)}</span>
-          <div class="dividend-column" aria-label="${escapeHtml(`${year} 股息收入 ${formatMoney(value)}`)}">
+          <div class="dividend-column" aria-label="${escapeHtml(`${year} ${label} ${formatMoney(value)}`)}">
             <i style="height:${percent}%"></i>
           </div>
           <strong>${escapeHtml(year)}</strong>
@@ -1718,10 +1754,10 @@ function renderAnnualDividendChart(rows) {
     .join("");
 
   return `
-    <div class="ranking-section dividend-section">
-      <h3>年度股息收入</h3>
+    <div class="ranking-section dividend-section annual-value-section">
+      ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
       <div class="dividend-summary">
-        <span>${escapeHtml(latest[0])} 截至目前：<strong class="dividend-value">${formatMoney(latest[1])}</strong></span>
+        <span>${escapeHtml(latest[0])} ${escapeHtml(latestLabel)}：<strong class="dividend-value">${formatMoney(latest[1])}</strong></span>
         <span>較前一年：<strong class="dividend-change ${latestDelta >= 0 ? "is-up" : "is-down"}">${formatSignedMoney(latestDelta)}</strong></span>
         <span>最高 ${escapeHtml(peak[0])}：<strong class="dividend-value">${formatMoney(peak[1])}</strong></span>
       </div>
