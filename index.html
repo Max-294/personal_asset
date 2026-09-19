@@ -44,8 +44,22 @@
         <button type="button" class="tab-button is-active" data-view="overview">資產總覽</button>
         <button type="button" class="tab-button" data-view="holdings">目前持股</button>
         <button type="button" class="tab-button" data-view="realizedTw">台股已實現損益</button>
+        <button type="button" class="tab-button" data-view="dividendIncome">台股歷年股息</button>
         <button type="button" class="tab-button" data-view="realizedUs">美股已實現損益</button>
       </nav>
+
+      <section id="dividendHistoryPanel" class="panel" hidden>
+        <div class="panel-header">
+          <h2>台股歷年股息</h2>
+          <span>金額單位：NT$</span>
+        </div>
+        <div id="dividendHistoryChart"></div>
+        <div class="panel-header dividend-stock-header">
+          <h2>各股累計股息</h2>
+          <span>歷年實收合計 · NT$</span>
+        </div>
+        <div id="dividendStockTotals" class="table-wrap dividend-stock-table"></div>
+      </section>
 
       <section class="summary-grid" aria-label="資產摘要">
         <article class="metric">
@@ -89,6 +103,11 @@
             <span id="barSubtitle">依目前市值</span>
           </div>
           <div id="accountBars" class="bar-list"></div>
+          <div id="chartRange" class="segmented chart-range" aria-label="資產曲線時間範圍">
+            <button type="button" data-months="12" aria-pressed="false">近一年</button>
+            <button type="button" data-months="36" aria-pressed="false">近三年</button>
+            <button type="button" data-months="0" aria-pressed="true">全部</button>
+          </div>
         </article>
       </section>
 
@@ -125,13 +144,21 @@
             </div>
           </div>
         </div>
+        <div class="holding-filter-bar">
+          <div id="holdingSearchSlot"></div>
+          <div id="holdingMarket" class="segmented" aria-label="持股市場">
+            <button type="button" data-market="" aria-pressed="true">全部</button>
+            <button type="button" data-market="台股" aria-pressed="false">台股</button>
+            <button type="button" data-market="美股" aria-pressed="false">美股</button>
+          </div>
+        </div>
         <div id="holdingCards" class="holding-cards"></div>
       </section>
 
       <section class="panel">
         <div class="panel-header table-header">
           <h2 id="detailTitle">資產明細</h2>
-          <input id="tableSearch" type="search" placeholder="搜尋資產、帳戶或類別" />
+          <input id="tableSearch" type="search" aria-label="搜尋資產" placeholder="搜尋名稱或代號" />
         </div>
         <div class="table-wrap">
           <table>

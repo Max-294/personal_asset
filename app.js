@@ -6,7 +6,7 @@ const sampleRows = [
   { assetClass: "基金", assetName: "全球科技基金", account: "銀行信託", quantity: 350, price: 21.4, value: 7490, currency: "TWD" },
 ];
 
-const palette = ["#123c34", "#b89455", "#4f7466", "#8a5f37", "#6b7f93", "#9f6c64", "#2f5f52"];
+const palette = ["#4256a6", "#36877e", "#7890c7", "#a87745", "#66768c", "#b34e59", "#737c47"];
 const LOCAL_MARKET_FETCH_TIMEOUT = 3500;
 const STATIC_MARKET_FETCH_TIMEOUT = 9000;
 const numericSortKeys = new Set([
@@ -107,6 +107,11 @@ let holdingCardSort = {
 let privacyMode = localStorage.getItem("assetDashboardPrivacy") === "hidden";
 
 const viewConfigs = {
+  dividendIncome: {
+    statusName: "台股歷年股息",
+    defaultSort: { key: "year", direction: "desc" },
+    tableColumns: [],
+  },
   overview: {
     statusName: "資產總覽",
     primaryLabel: "最新淨資產",
@@ -238,6 +243,25 @@ const elements = {
 };
 
 elements.refreshData.addEventListener("click", loadFixedSources);
+let holdingMarket = "";
+let chartMonths = 0;
+const tableSearchHome = elements.tableSearch.parentElement;
+document.querySelector("#holdingMarket").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-market]");
+  if (!button) return;
+  holdingMarket = button.dataset.market;
+  document.querySelectorAll("[data-market]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+  renderHoldingCards(currentRows, elements.tableSearch.value);
+  renderTable(currentRows, elements.tableSearch.value);
+});
+document.querySelector("#chartRange").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-months]");
+  if (!button) return;
+  chartMonths = Number(button.dataset.months);
+  document.querySelectorAll("[data-months]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+  renderLineChart(currentRows);
+  applyPrivacyMasks();
+});
 elements.privacyToggle.addEventListener("click", () => {
   privacyMode = !privacyMode;
   localStorage.setItem("assetDashboardPrivacy", privacyMode ? "hidden" : "visible");
@@ -1341,6 +1365,18 @@ function deriveDailyPercentFromSheet(change, percent, price, previousClose = 0) 
 function renderDashboard(rows) {
   currentRows = rows;
   document.body.dataset.view = currentView;
+  document.querySelector("#dividendHistoryPanel").hidden = currentView !== "dividendIncome";
+  if (currentView === "dividendIncome") {
+    hideHoldingCards();
+    hideAnnualNetAssetChart();
+    document.querySelector("#dividendHistoryChart").innerHTML = renderAnnualDividendChart(rows);
+    renderDividendStockTotals(rows);
+    elements.updatedAt.textContent = rows.length ? new Date().toLocaleString("zh-TW") : "--";
+    applyPrivacyMasks();
+    return;
+  }
+  (currentView === "holdings" ? document.querySelector("#holdingSearchSlot") : tableSearchHome).append(elements.tableSearch);
+  elements.tableSearch.placeholder = currentView === "overview" ? "搜尋日期或備註" : "搜尋名稱或代號";
   const config = viewConfigs[currentView];
   if (currentView === "overview") {
     hideHoldingCards();
@@ -1611,7 +1647,7 @@ function renderBars(grouped, total) {
     .sort((a, b) => b[1] - a[1])
     .map(([name, value], index) => {
       const percent = (value / total) * 100;
-      const color = palette[(index + 1) % palette.length];
+      const color = palette[index % palette.length];
       return `
         <div class="bar-row">
           <div class="bar-meta">
@@ -1646,7 +1682,6 @@ function renderProfitLossRanking(rows) {
   elements.accountBars.innerHTML = `
     ${renderRankingSection("獲利前五", profits, maxValue, "#5f8061")}
     ${renderRankingSection("虧損前五", losses, maxValue, "#b16d63")}
-    ${currentView === "realizedTw" ? renderAnnualDividendChart(viewData.dividendIncome) : ""}
   `;
 }
 
@@ -1675,6 +1710,24 @@ function renderRankingSection(title, rows, maxValue, color) {
       <h3>${escapeHtml(title)}</h3>
       ${body}
     </div>
+  `;
+}
+
+function renderDividendStockTotals(rows) {
+  const totals = new Map();
+  for (const row of rows) {
+    const name = row.assetName.trim();
+    if (!name || isSummaryName(name)) continue;
+    totals.set(name, (totals.get(name) || 0) + row.value);
+  }
+  const entries = [...totals].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"));
+  document.querySelector("#dividendStockTotals").innerHTML = `
+    <table>
+      <thead><tr><th>股名</th><th class="numeric">累計實收股息</th></tr></thead>
+      <tbody>${entries.length ? entries.map(([name, value]) => `
+        <tr><td>${escapeHtml(name)}</td><td class="numeric">${formatMoney(value)}</td></tr>
+      `).join("") : '<tr><td colspan="2" class="empty">尚無股息資料</td></tr>'}</tbody>
+    </table>
   `;
 }
 
@@ -1767,6 +1820,11 @@ function renderAnnualValueChart(sourceEntries, { title = "", label, latestLabel,
 }
 
 function renderLineChart(rows) {
+  if (chartMonths && rows.length) {
+    const latestDate = new Date(Math.max(...rows.map((row) => row.dateValue)));
+    const cutoff = new Date(latestDate.getFullYear(), latestDate.getMonth() - chartMonths + 1, 1).getTime();
+    rows = rows.filter((row) => row.dateValue >= cutoff);
+  }
   if (rows.length < 2) {
     elements.accountBars.innerHTML = '<p class="empty">尚無足夠月份資料</p>';
     return;
@@ -1776,7 +1834,7 @@ function renderLineChart(rows) {
   const width = 680;
   const height = 300;
   const padding = { top: 34, right: 24, bottom: 48, left: 66 };
-  const values = sortedRows.flatMap((row) => [row.grossAsset, row.displayNetAsset]).filter((value) => value > 0);
+  const values = sortedRows.flatMap((row) => [row.grossAsset, row.displayNetAsset]).filter(Number.isFinite);
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const range = maxValue - minValue || 1;
@@ -1800,12 +1858,12 @@ function renderLineChart(rows) {
       <svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="每月資產變化曲線">
         <defs>
           <linearGradient id="grossAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#496f83" stop-opacity="0.22" />
-            <stop offset="100%" stop-color="#496f83" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="#4256a6" stop-opacity="0.16" />
+            <stop offset="100%" stop-color="#4256a6" stop-opacity="0.02" />
           </linearGradient>
           <linearGradient id="netAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#b89455" stop-opacity="0.24" />
-            <stop offset="100%" stop-color="#b89455" stop-opacity="0.03" />
+            <stop offset="0%" stop-color="#36877e" stop-opacity="0.16" />
+            <stop offset="100%" stop-color="#36877e" stop-opacity="0.02" />
           </linearGradient>
         </defs>
         <rect class="chart-bg" x="${padding.left}" y="${padding.top}" width="${width - padding.left - padding.right}" height="${height - padding.top - padding.bottom}" rx="12" />
@@ -1884,6 +1942,9 @@ function renderTable(rows, query = "") {
 }
 
 function filterRowsByQuery(rows, query = "") {
+  if (currentView === "holdings" && holdingMarket) {
+    rows = rows.filter((row) => row.assetClass === holdingMarket);
+  }
   const keyword = query.trim().toLowerCase();
   if (!keyword) {
     return rows;
@@ -1983,22 +2044,22 @@ function renderHoldingCard(row, totalPortfolioValue) {
         </div>
         <div class="holding-card-trend">
           <span class="market-badge">${escapeHtml(row.assetClass)}</span>
-          <strong class="holding-card-percent">${escapeHtml(dailyPercentLabel)}</strong>
         </div>
       </div>
       <div class="holding-card-value-row">
         <div class="holding-card-main">
-          <span>目前總值</span>
+          <span>目前總值 · NT$</span>
           <strong class="holding-card-value">${formatMoney(row.baseValue)}</strong>
         </div>
         <div class="holding-card-day ${trendClass}">
-          <span>今日漲跌</span>
+          <span>今日漲跌 · NT$</span>
           <strong class="holding-card-delta">${escapeHtml(dailyAmountLabel)}</strong>
+          <strong class="holding-card-percent">${quote ? `(${escapeHtml(dailyPercentLabel)})` : ""}</strong>
         </div>
       </div>
       <div class="holding-card-quote-row">
         <div>
-          <span>目前股價</span>
+          <span>股價 · ${row.assetClass === "美股" ? "US$" : "NT$"}</span>
           <strong class="holding-card-price">${formatNullableNumber(row.price, 2)}</strong>
         </div>
         <div>
@@ -2012,12 +2073,12 @@ function renderHoldingCard(row, totalPortfolioValue) {
       </div>
       <div class="holding-card-lifecycle">
         <div class="${profitClass}">
-          <span>累積損益</span>
+          <span>累積損益 · NT$</span>
           <strong class="holding-card-profit">${formatNullableSignedMoney(cumulativeProfit)}</strong>
-          <em>${formatNullablePercent(returnRate)}</em>
+          <em class="holding-card-return">${formatNullablePercent(returnRate)}</em>
         </div>
         <div>
-          <span>累計股息</span>
+          <span>累計股息 · NT$</span>
           <strong class="holding-card-dividend">${formatNullableMoney(dividend)}</strong>
           <em>${row.assetClass === "台股" ? "已領股息" : "交易資料"}</em>
         </div>
@@ -2139,6 +2200,7 @@ function applyPrivacyMasks() {
       ].join(", "),
     )
     .forEach((element) => {
+      if (currentView === "holdings" && (element.id === "assetClassCount" || element.id === "accountCount")) return;
       updateSvgPrivateText(element);
       element.classList.add("privacy-mask");
     });
