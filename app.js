@@ -79,7 +79,7 @@ const dataSources = {
   },
 };
 let currentRows = [];
-let currentView = "overview";
+let currentView = "holdings";
 let usdToTwdRate = 1;
 let viewData = {
   overview: [],
@@ -97,7 +97,7 @@ let dailyProfitState = {
 };
 let dailyProfitRequestId = 0;
 let tableSort = {
-  key: "dateValue",
+  key: "baseValue",
   direction: "desc",
 };
 let holdingCardSort = {
@@ -107,6 +107,11 @@ let holdingCardSort = {
 let privacyMode = localStorage.getItem("assetDashboardPrivacy") === "hidden";
 
 const viewConfigs = {
+  etfDividends: {
+    statusName: "ETF 配息追蹤",
+    defaultSort: { key: "ticker", direction: "asc" },
+    tableColumns: [],
+  },
   dividendIncome: {
     statusName: "台股歷年股息",
     defaultSort: { key: "year", direction: "desc" },
@@ -242,7 +247,18 @@ const elements = {
   emptyState: document.querySelector("#emptyState"),
 };
 
+const etfDividendState = { loading: false, catalog: null, results: new Map(), loadedHoldings: false, page: 0, error: "", requestId: 0 };
 elements.refreshData.addEventListener("click", loadFixedSources);
+document.querySelector("#refreshEtfDividends").addEventListener("click", () => loadEtfDividends(true));
+let etfSearchTimer;
+document.querySelector("#etfSearch").addEventListener("input", () => {
+  clearTimeout(etfSearchTimer);
+  etfDividendState.page = 0;
+  etfSearchTimer = setTimeout(() => loadEtfDividends(), 350);
+});
+document.querySelector("#etfScope").addEventListener("change", () => { etfDividendState.page = 0; loadEtfDividends(); });
+document.querySelector("#etfPrevious").addEventListener("click", () => { etfDividendState.page--; loadEtfDividends(); });
+document.querySelector("#etfNext").addEventListener("click", () => { etfDividendState.page++; loadEtfDividends(); });
 let holdingMarket = "";
 let chartMonths = 0;
 const tableSearchHome = elements.tableSearch.parentElement;
@@ -372,7 +388,9 @@ async function loadFixedSources() {
       dividendIncome: dividendIncomeRows,
     };
     resetDailyProfitState();
+    etfDividendState.loadedHoldings = true;
     renderView();
+    if (currentView === "etfDividends") loadEtfDividends();
     loadDailyHoldingProfit(viewData.holdings);
     const usdRate = foreignQuoteRows.find((row) => row.currency === "USD")?.exchangeRate;
     setStatus(
@@ -1365,7 +1383,14 @@ function deriveDailyPercentFromSheet(change, percent, price, previousClose = 0) 
 function renderDashboard(rows) {
   currentRows = rows;
   document.body.dataset.view = currentView;
+  document.querySelector("#etfDividendPanel").hidden = currentView !== "etfDividends";
   document.querySelector("#dividendHistoryPanel").hidden = currentView !== "dividendIncome";
+  if (currentView === "etfDividends") {
+    hideHoldingCards();
+    hideAnnualNetAssetChart();
+    renderEtfDividends();
+    return;
+  }
   if (currentView === "dividendIncome") {
     hideHoldingCards();
     hideAnnualNetAssetChart();
@@ -1563,6 +1588,7 @@ function switchView(view) {
     button.classList.toggle("is-active", button.dataset.view === currentView);
   });
   renderView();
+  if (view === "etfDividends") loadEtfDividends();
 }
 
 function renderTableHead() {
@@ -1711,6 +1737,108 @@ function renderRankingSection(title, rows, maxValue, color) {
       ${body}
     </div>
   `;
+}
+
+// Editorial watchlist, not a live volume or popularity ranking.
+const popularEtfTickers = new Set([
+  "0050", "0056", "006208", "00631L", "00679B", "00687B", "00713",
+  "00720B", "00878", "00919", "00929", "00937B", "00940", "00981A",
+]);
+
+function getEtfPage() {
+  const query = document.querySelector("#etfSearch").value.trim().toLowerCase();
+  const scope = document.querySelector("#etfScope").value;
+  const held = new Set(viewData.holdings.filter((row) => row.assetClass === "台股").map((row) => String(row.ticker)));
+  const funds = (etfDividendState.catalog?.funds || []).filter((fund) =>
+    (!query || `${fund.ticker} ${fund.name}`.toLowerCase().includes(query)) &&
+    (scope === "all" || (scope === "popular" ? popularEtfTickers.has(fund.ticker) : scope === "held" ? held.has(fund.ticker) : fund.market === scope)));
+  const pages = Math.max(1, Math.ceil(funds.length / 9));
+  etfDividendState.page = Math.max(0, Math.min(etfDividendState.page, pages - 1));
+  return { funds: funds.slice(etfDividendState.page * 9, (etfDividendState.page + 1) * 9), total: funds.length, pages };
+}
+
+let etfCatalogRequest;
+const etfRequests = new Map();
+async function loadEtfDividends(force = false) {
+  const id = ++etfDividendState.requestId;
+  etfDividendState.loading = true;
+  etfDividendState.error = "";
+  renderEtfDividends();
+  try {
+    if (!etfDividendState.catalog || force) {
+      if (!etfCatalogRequest) etfCatalogRequest = EtfDividends.fetchCatalog(force).finally(() => { etfCatalogRequest = null; });
+      etfDividendState.catalog = await etfCatalogRequest;
+    }
+    if (id !== etfDividendState.requestId) return;
+    const queue = [...getEtfPage().funds];
+    renderEtfDividends();
+    const worker = async () => {
+      while (queue.length && id === etfDividendState.requestId) {
+        const fund = queue.shift();
+        try {
+          if (!etfRequests.has(fund.ticker)) {
+            etfRequests.set(fund.ticker, EtfDividends.fetchHistory(fund.ticker, { force }).finally(() => etfRequests.delete(fund.ticker)));
+          }
+          const result = await etfRequests.get(fund.ticker);
+          etfDividendState.results.set(fund.ticker, result);
+          if (id === etfDividendState.requestId) renderEtfDividends();
+          if (EtfDividends.normalize(result.records, fund.ticker).paid.length >= 2) {
+            try {
+              const yieldInputs = await EtfDividends.fetchYieldInputs(fund.ticker, force);
+              etfDividendState.results.set(fund.ticker, { ...result, yieldInputs });
+            } catch {
+              etfDividendState.results.set(fund.ticker, { ...result, yieldError: true });
+            }
+          }
+        } catch (error) {
+          etfDividendState.results.set(fund.ticker, { error: "讀取失敗，請稍後更新配息" });
+        }
+        if (id === etfDividendState.requestId) renderEtfDividends();
+      }
+    };
+    await Promise.all([worker(), worker()]);
+  } catch (error) {
+    etfDividendState.error = "ETF 清單讀取失敗，請稍後按「更新配息」重試。";
+  } finally {
+    if (id === etfDividendState.requestId) {
+      etfDividendState.loading = false;
+      renderEtfDividends();
+    }
+  }
+}
+
+function renderEtfDividends() {
+  const { funds, total, pages } = getEtfPage();
+  document.querySelector("#refreshEtfDividends").disabled = etfDividendState.loading;
+  const failures = funds.filter((fund) => etfDividendState.results.get(fund.ticker)?.error).length;
+  const stale = funds.some((fund) => etfDividendState.results.get(fund.ticker)?.stale);
+  document.querySelector("#etfDividendStatus").textContent = etfDividendState.error ||
+    (etfDividendState.loading ? `載入配息中 · ${total} 檔 ETF` : `共 ${total} 檔 ETF${failures ? ` · ${failures} 檔讀取失敗` : ""}${stale || etfDividendState.catalog?.stale ? " · 部分資料為先前快取" : ""}`);
+  if (document.querySelector("#etfScope").value === "popular") {
+    document.querySelector("#etfDividendStatus").textContent += " · 固定精選名單，非即時人氣排名";
+  }
+  document.querySelector("#etfPage").textContent = `${etfDividendState.page + 1} / ${pages}`;
+  document.querySelector("#etfPrevious").disabled = etfDividendState.page === 0;
+  document.querySelector("#etfNext").disabled = etfDividendState.page + 1 >= pages;
+  document.querySelector("#etfDividendCards").innerHTML = funds.map((fund) => {
+    const result = etfDividendState.results.get(fund.ticker);
+    let body = '<p class="empty">載入中…</p>';
+    if (result?.error) body = `<p class="empty">${escapeHtml(result.error)}</p>`;
+    else if (result) {
+      const { paid, upcoming } = EtfDividends.normalize(result.records, fund.ticker);
+      const totalPaid = paid.reduce((value, row) => value + row.amount, 0);
+      const inputs = result.yieldInputs;
+      const estimate = inputs ? EtfDividends.estimateYield(paid, inputs.quote, inputs.splits, fund.ticker) : null;
+      const yieldLabel = estimate && Number.isFinite(estimate.rate) ? `${estimate.rate.toFixed(2)}%` : "—";
+      const yieldDetail = result.yieldError ? "股價或分割資料讀取失敗，請更新重試" : paid.length < 2 ? "配息紀錄不足，暫無法判斷頻率" : !inputs ? "讀取收盤價與分割資料中…" : estimate.reason || `${estimate.frequency}（推估） · 最近 ${estimate.count} 次 · 年化 ${formatNumber(estimate.annualDividend)} 元／單位${estimate.adjusted ? " · 已按分割換算" : ""}`;
+      body = `${paid.length ? `<table><thead><tr><th>除息日</th><th>發放日</th><th class="numeric">每單位配息</th></tr></thead><tbody>${paid.map((row) => `<tr><td>${row.exDate}</td><td>${row.paymentDate}</td><td class="numeric">${formatNumber(row.amount)}</td></tr>`).join("")}</tbody></table><p class="etf-total">最近 ${paid.length} 次合計 <strong>${formatNumber(totalPaid)}</strong> 元／單位</p>` : '<p class="empty">來源查無已發放配息紀錄</p>'}
+        ${upcoming.length ? `<div class="etf-upcoming">已公告待發放${upcoming.map((row) => `<p>${row.paymentDate} · ${formatNumber(row.amount)} 元／單位</p>`).join("")}</div>` : ""}
+        <div class="etf-yield"><div><span>估算年化配息率</span><strong>${yieldLabel}</strong></div><p>${yieldDetail}</p>${inputs?.quote ? `<p>收盤價 NT$ ${formatNumber(inputs.quote.close)} · ${inputs.quote.date}${inputs.stale ? " · 更新失敗，使用快取" : ""}</p>` : ""}</div>
+        <p class="etf-caption">${result.stale ? "更新失敗，保留資料：" : "資料更新："}${new Date(result.updatedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</p>`;
+    }
+    const sourceUrl = fund.market === "上市" ? `https://www.twse.com.tw/zh/ETFortune/etfInfo/${encodeURIComponent(fund.ticker)}` : `https://info.tpex.org.tw/ETF/zh/detail.html?query=${encodeURIComponent(fund.ticker)}`;
+    return `<article class="etf-card"><header><div><h3>${escapeHtml(fund.name)}</h3><span>${escapeHtml(fund.ticker)} · ${fund.market}</span></div><a href="${sourceUrl}" target="_blank" rel="noopener noreferrer">官方資料</a></header>${body}</article>`;
+  }).join("") || (etfDividendState.loading ? '<p class="empty">載入 ETF 清單中…</p>' : '<p class="empty">沒有符合條件的 ETF</p>');
 }
 
 function renderDividendStockTotals(rows) {
@@ -2200,6 +2328,7 @@ function applyPrivacyMasks() {
       ].join(", "),
     )
     .forEach((element) => {
+      if (element.closest("#etfDividendPanel")) return;
       if (currentView === "holdings" && (element.id === "assetClassCount" || element.id === "accountCount")) return;
       updateSvgPrivateText(element);
       element.classList.add("privacy-mask");

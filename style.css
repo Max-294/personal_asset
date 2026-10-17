@@ -1413,6 +1413,30 @@ td {
 
 /* Cool-gray portfolio theme and responsive reading hierarchy. */
 #dividendHistoryPanel[hidden] { display: none; }
+#etfDividendPanel[hidden] { display: none; }
+body[data-view="etfDividends"] main > section:not(#etfDividendPanel) { display: none; }
+.etf-caption, #etfDividendStatus { color: var(--muted); font-size: 0.8rem; line-height: 1.7; }
+.etf-caption { margin: 8px 0 0; }
+.etf-dividend-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); gap: 16px; margin: 20px 0; }
+.etf-card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.etf-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.etf-card h3 { margin: 0 0 4px; font-size: 1rem; overflow-wrap: anywhere; }
+.etf-card header span, .etf-card a { font-size: 0.8rem; color: var(--muted); }
+.etf-card table { min-width: 0; table-layout: fixed; }
+.etf-card th, .etf-card td { padding: 10px 3px; font-size: 0.76rem; white-space: nowrap; }
+.etf-total { margin: 14px 0; font-size: 0.85rem; }
+.etf-total strong { font-size: 1.1rem; margin-left: 8px; font-variant-numeric: tabular-nums; }
+.etf-yield { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 14px; }
+.etf-yield > div { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.85rem; }
+.etf-yield strong { font-size: 1.4rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+.etf-yield p { margin: 6px 0; color: var(--muted); font-size: 0.76rem; line-height: 1.6; overflow-wrap: anywhere; }
+.etf-upcoming { border-top: 1px solid var(--line); padding-top: 12px; font-size: 0.8rem; color: var(--accent); }
+.etf-upcoming p { margin: 6px 0; }
+.etf-pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 20px 0; }
+.etf-pagination button, #etfScope { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+#etfSearch { flex: 1; min-width: 180px; max-width: 460px; }
+#etfDividendPanel > .panel-header { flex-wrap: wrap; gap: 16px; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
 body[data-view="dividendIncome"] main > section:not(#dividendHistoryPanel) { display: none; }
 #dividendHistoryChart .dividend-section { border-top: 0; margin-top: 0; padding-top: 0; }
 .dividend-stock-header { margin-top: 32px; }

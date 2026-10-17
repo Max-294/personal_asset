@@ -41,12 +41,29 @@
 
     <main>
       <nav class="view-tabs" aria-label="Dashboard 分頁">
-        <button type="button" class="tab-button is-active" data-view="overview">資產總覽</button>
-        <button type="button" class="tab-button" data-view="holdings">目前持股</button>
+        <button type="button" class="tab-button is-active" data-view="holdings">目前持股</button>
+        <button type="button" class="tab-button" data-view="overview">資產總覽</button>
         <button type="button" class="tab-button" data-view="realizedTw">台股已實現損益</button>
         <button type="button" class="tab-button" data-view="dividendIncome">台股歷年股息</button>
+        <button type="button" class="tab-button" data-view="etfDividends">ETF 配息追蹤</button>
         <button type="button" class="tab-button" data-view="realizedUs">美股已實現損益</button>
       </nav>
+
+      <section id="etfDividendPanel" class="panel" hidden>
+        <div class="panel-header">
+          <div><h2>ETF 配息追蹤</h2><p class="etf-caption">台灣上市櫃 ETF · 最近 4 次已發放配息</p></div>
+          <button type="button" id="refreshEtfDividends" class="header-action">更新配息</button>
+        </div>
+        <div class="holding-filter-bar">
+          <input id="etfSearch" type="search" aria-label="搜尋 ETF" placeholder="搜尋 ETF 名稱或代號" />
+          <select id="etfScope" aria-label="ETF 範圍"><option value="all">全部 ETF</option><option value="popular">熱門 ETF</option><option value="held">我的持股</option><option value="上市">上市</option><option value="上櫃">上櫃</option></select>
+        </div>
+        <p id="etfDividendStatus" role="status">等待持股資料</p>
+        <div id="etfDividendCards" class="etf-dividend-cards"></div>
+        <div class="etf-pagination"><button type="button" id="etfPrevious" aria-label="上一頁">上一頁</button><span id="etfPage"></span><button type="button" id="etfNext" aria-label="下一頁">下一頁</button></div>
+        <p class="etf-caption">每單位配息為公告原始金額，未回溯調整分割；4 次合計不等同年配息。少於 4 次時顯示現有紀錄，查無紀錄不代表未曾配息。資料來源：<a href="https://finmind.github.io/tutor/TaiwanMarket/Fundamental/" target="_blank" rel="noopener noreferrer">FinMind</a>，實際配息以投信公告為準。</p>
+        <p class="etf-caption">估算年化配息率＝最近最多 4 次平均配息 × 推估每年配息次數 ÷ 最近收盤價。年化計算另依已知分割換算單位，不更改上方原始紀錄；頻率由除息間隔推估，不含股價損益、稅費，也不保證未來配息。</p>
+      </section>
 
       <section id="dividendHistoryPanel" class="panel" hidden>
         <div class="panel-header">
@@ -177,6 +194,7 @@
       </tr>
     </template>
 
+    <script src="./etf-dividends.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
