@@ -6,7 +6,7 @@ const sampleRows = [
   { assetClass: "基金", assetName: "全球科技基金", account: "銀行信託", quantity: 350, price: 21.4, value: 7490, currency: "TWD" },
 ];
 
-const palette = ["#4256a6", "#36877e", "#7890c7", "#a87745", "#66768c", "#b34e59", "#737c47"];
+const palette = ["#841c35", "#625b60", "#b36b7e", "#44786b", "#8a7d83", "#444047", "#9b635c"];
 const LOCAL_MARKET_FETCH_TIMEOUT = 3500;
 const STATIC_MARKET_FETCH_TIMEOUT = 9000;
 const numericSortKeys = new Set([
@@ -554,13 +554,9 @@ function isYahooFinanceUrl(url) {
 }
 
 function fetchWithTimeout(url, timeout = getMarketFetchTimeout()) {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeout);
   return fetch(url, {
     cache: "no-store",
-    signal: controller.signal,
-  }).finally(() => {
-    window.clearTimeout(timeoutId);
+    signal: AbortSignal.timeout(timeout),
   });
 }
 
@@ -1416,7 +1412,7 @@ function renderDashboard(rows) {
   const byClass = groupSum(chartRows, "assetClass", isRealizedView);
   const byAccount = groupSum(chartRows, "account");
   const distributionGroup = currentView === "holdings" ? byClass : byAccount;
-  const largestRow = [...rows].sort((a, b) => b.baseValue - a.baseValue)[0];
+  const largestRow = rows.toSorted((a, b) => b.baseValue - a.baseValue)[0];
 
   elements.primaryMetricLabel.textContent = config.primaryLabel;
   elements.secondMetricLabel.textContent = config.secondLabel;
@@ -1455,7 +1451,7 @@ function renderDashboard(rows) {
 }
 
 function renderOverviewDashboard(rows, config) {
-  const latest = [...rows].sort((a, b) => b.dateValue - a.dateValue)[0];
+  const latest = rows.toSorted((a, b) => b.dateValue - a.dateValue)[0];
   const composition = latest ? getAssetComposition(latest) : [];
   const compositionTotal = composition.reduce((total, item) => total + item.value, 0);
 
@@ -1892,7 +1888,7 @@ function renderAnnualNetAssetChart(rows) {
 
 function hideAnnualNetAssetChart() {
   elements.annualNetAssetPanel.classList.add("is-hidden");
-  elements.annualNetAssetChart.innerHTML = "";
+  elements.annualNetAssetChart.replaceChildren();
 }
 
 function renderAnnualValueChart(sourceEntries, { title = "", label, latestLabel, emptyMessage }) {
@@ -1958,7 +1954,7 @@ function renderLineChart(rows) {
     return;
   }
 
-  const sortedRows = [...rows].sort((a, b) => a.dateValue - b.dateValue);
+  const sortedRows = rows.toSorted((a, b) => a.dateValue - b.dateValue);
   const width = 680;
   const height = 300;
   const padding = { top: 34, right: 24, bottom: 48, left: 66 };
@@ -1986,12 +1982,12 @@ function renderLineChart(rows) {
       <svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="每月資產變化曲線">
         <defs>
           <linearGradient id="grossAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#4256a6" stop-opacity="0.16" />
-            <stop offset="100%" stop-color="#4256a6" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="#841c35" stop-opacity="0.16" />
+            <stop offset="100%" stop-color="#841c35" stop-opacity="0.02" />
           </linearGradient>
           <linearGradient id="netAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#36877e" stop-opacity="0.16" />
-            <stop offset="100%" stop-color="#36877e" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="#177044" stop-opacity="0.16" />
+            <stop offset="100%" stop-color="#177044" stop-opacity="0.02" />
           </linearGradient>
         </defs>
         <rect class="chart-bg" x="${padding.left}" y="${padding.top}" width="${width - padding.left - padding.right}" height="${height - padding.top - padding.bottom}" rx="12" />
@@ -2110,7 +2106,7 @@ function renderHoldingCards(rows, query = "") {
 
 function sortHoldingCards(rows, totalPortfolioValue) {
   const direction = holdingCardSort.direction === "asc" ? 1 : -1;
-  return [...rows].sort((left, right) => {
+  return rows.toSorted((left, right) => {
     const leftValue = getHoldingCardSortValue(left, totalPortfolioValue);
     const rightValue = getHoldingCardSortValue(right, totalPortfolioValue);
     if (leftValue === rightValue) {
@@ -2226,7 +2222,7 @@ function getHoldingDailyAmount(row) {
 
 function hideHoldingCards() {
   elements.holdingCardsPanel.classList.add("is-hidden");
-  elements.holdingCards.innerHTML = "";
+  elements.holdingCards.replaceChildren();
 }
 
 function getHoldingQuote(row) {
@@ -2391,7 +2387,7 @@ function formatMonth(value) {
 
 function sortRows(rows) {
   const directionFactor = tableSort.direction === "asc" ? 1 : -1;
-  return [...rows].sort((a, b) => {
+  return rows.toSorted((a, b) => {
     const aValue = a[tableSort.key];
     const bValue = b[tableSort.key];
 

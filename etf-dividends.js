@@ -14,7 +14,7 @@
 
   function normalize(records, ticker, today = taiwanToday()) {
     const events = new Map();
-    for (const row of [...records].sort((a, b) => String(a.date).localeCompare(String(b.date)))) {
+    for (const row of records.toSorted((a, b) => String(a.date).localeCompare(String(b.date)))) {
       if (String(row.stock_id) !== ticker) continue;
       const paymentDate = row.CashDividendPaymentDate;
       const exDate = row.CashExDividendTradingDate;
@@ -49,10 +49,8 @@
     try { cache = JSON.parse(root.localStorage.getItem("etf-catalog-v1")); } catch {}
     const usable = Array.isArray(cache?.funds) && cache.funds.length && Number.isFinite(cache.updatedAt);
     if (!force && usable && Date.now() - cache.updatedAt < CACHE_TTL) return { ...cache, stale: false };
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await root.fetch(`${API}?dataset=TaiwanStockInfo`, { signal: controller.signal });
+      const response = await root.fetch(`${API}?dataset=TaiwanStockInfo`, { signal: AbortSignal.timeout(15000) });
       const body = await response.json();
       if (!response.ok || body.status !== 200 || !Array.isArray(body.data)) throw new Error("ETF 清單暫時無法取得");
       const funds = normalizeCatalog(body.data);
@@ -63,7 +61,7 @@
     } catch (error) {
       if (usable) return { ...cache, stale: true };
       throw error;
-    } finally { clearTimeout(timer); }
+    }
   }
 
   async function fetchHistory(ticker, { force = false, storage = root.localStorage, fetcher = root.fetch.bind(root) } = {}) {
@@ -72,11 +70,9 @@
     try { cached = JSON.parse(storage.getItem(key)); } catch { /* Storage may be disabled. */ }
     const usable = cached?.ticker === ticker && Array.isArray(cached.records) && Number.isFinite(cached.updatedAt);
     if (!force && usable && Date.now() - cached.updatedAt < CACHE_TTL) return { ...cached, stale: false };
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const query = new URLSearchParams({ dataset: "TaiwanStockDividend", data_id: ticker, start_date: "2005-01-01" });
-      const response = await fetcher(`${API}?${query}`, { signal: controller.signal });
+      const response = await fetcher(`${API}?${query}`, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error(`行情來源回應 ${response.status}`);
       const body = await response.json();
       if (body.status !== 200 || !Array.isArray(body.data)) throw new Error("配息來源暫時無法提供資料");
@@ -86,8 +82,6 @@
     } catch (error) {
       if (usable) return { ...cached, stale: true };
       throw error;
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -97,15 +91,13 @@
     try { cache = JSON.parse(root.localStorage.getItem(key)); } catch {}
     const usable = Array.isArray(cache?.records) && Number.isFinite(cache.updatedAt);
     if (!force && usable && Date.now() - cache.updatedAt < CACHE_TTL) return { ...cache, stale: false };
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const query = new URLSearchParams({ dataset });
       if (ticker) {
         query.set("data_id", ticker);
         query.set("start_date", new Date(Date.parse(`${taiwanToday()}T00:00:00Z`) - 30 * 86400000).toISOString().slice(0, 10));
       }
-      const response = await root.fetch(`${API}?${query}`, { signal: controller.signal });
+      const response = await root.fetch(`${API}?${query}`, { signal: AbortSignal.timeout(15000) });
       const body = await response.json();
       if (!response.ok || body.status !== 200 || !Array.isArray(body.data)) throw new Error("年化配息率資料讀取失敗");
       const result = { records: body.data, updatedAt: Date.now() };
@@ -114,7 +106,7 @@
     } catch (error) {
       if (usable) return { ...cache, stale: true };
       throw error;
-    } finally { clearTimeout(timer); }
+    }
   }
 
   let splitRequest;
@@ -132,7 +124,7 @@
     if (!quote || !validDate(quote.date) || !Number.isFinite(Number(quote.close)) || Number(quote.close) <= 0) return { reason: "暫無可用收盤價" };
     const day = (date) => Date.parse(`${date}T00:00:00Z`) / 86400000;
     if (day(today) - day(quote.date) > 14 || quote.date > today) return { reason: "收盤價日期過舊，暫不估算" };
-    const rows = [...paid].sort((a, b) => b.exDate.localeCompare(a.exDate)).slice(0, 4);
+    const rows = paid.toSorted((a, b) => b.exDate.localeCompare(a.exDate)).slice(0, 4);
     const gaps = rows.slice(1).map((row, i) => day(rows[i].exDate) - day(row.exDate));
     const frequency = [
       { label: "月配", count: 12, min: 20, max: 45 },
